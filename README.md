@@ -1,15 +1,15 @@
-<div align="center">
+# ✦ Pristine
 
-✦ PRISTINE
+**Deep clean and optimize your Mac — from the terminal.**
 
-Deep clean and optimize your Mac — straight from the terminal.
+[![macOS](https://img.shields.io/badge/macOS-12%2B-blue?style=flat-square)](https://www.apple.com/macos/)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-purple?style=flat-square)]()
+[![Shell](https://img.shields.io/badge/shell-bash-orange?style=flat-square)]()
 
-Think CleanMyMac meets iStat Menus meets AppCleaner — but free, open-source, and fully inspectable.
+Pristine is a **zero-dependency**, single-file Mac cleaner that runs entirely in your terminal. Think CleanMyMac meets iStat Menus meets AppCleaner — but free, open-source, and fully inspectable. No Electron. No subscription. No bloat.
 
-Zero Dependencies • No Electron • No Subscriptions • No Bloat
-
-</div>
-
+```
 ╔═══════════════════════════════════════════════════╗
 ║   ✦  PRISTINE  — Deep clean and optimize your Mac ║
 ╚═══════════════════════════════════════════════════╝
@@ -24,73 +24,49 @@ Zero Dependencies • No Electron • No Subscriptions • No Bloat
       purge       Delete build artifacts (node_modules etc.)
       status      Live real-time system health dashboard
       doctor      Full system health check & recommendations
+```
 
+---
 
-✨ Why Pristine?
+## ✨ Features
 
-Feature
+| Feature | Description |
+|---|---|
+| **Deep Clean** | Removes user caches, system logs, browser caches, npm/pip/yarn/gradle caches, Xcode DerivedData, Docker layers, and Trash |
+| **Smart Uninstaller** | Finds and removes apps + all associated preferences, launch agents, containers, logs, and support files |
+| **System Optimizer** | Flushes DNS, rebuilds Dock/Finder, runs periodic maintenance, clears font cache, rebuilds Launch Services |
+| **Disk Analyzer** | Visual breakdown of disk usage — drill into any folder, see percentage bars at a glance |
+| **Build Artifact Purge** | Finds and removes `node_modules`, `target`, `.build`, `venv`, `__pycache__`, and 10+ more across all your projects |
+| **Live Status Dashboard** | Real-time CPU, memory, disk, battery, and top processes — refreshes every 2 seconds |
+| **Doctor** | Read-only system health report with actionable recommendations |
+| **Interactive TUI** | Beautiful arrow-key menu — no mouse needed |
+| **Dry Run Mode** | Preview exactly what would be deleted before committing |
+| **Safe by default** | Confirmations before every destructive action |
 
-Description
+---
 
-🧹 Deep Clean
+## 🚀 Install
 
-Removes user caches, system logs, browser caches, npm/pip/yarn/gradle caches, Xcode DerivedData, Docker layers, and Trash.
+**One-liner:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/install.sh | bash
+```
 
-🗑️ Smart Uninstaller
-
-Finds and removes apps + all associated preferences, launch agents, containers, logs, and support files.
-
-⚡ System Optimizer
-
-Flushes DNS, rebuilds Dock/Finder, runs periodic maintenance, clears font cache, rebuilds Launch Services.
-
-📊 Disk Analyzer
-
-Visual breakdown of disk usage — drill into any folder, see percentage bars at a glance.
-
-📦 Build Artifact Purge
-
-Finds and removes node_modules, target, .build, venv, __pycache__, and 10+ more across all your projects.
-
-⏱️ Live Dashboard
-
-Real-time CPU, memory, disk, battery, and top processes — refreshes every 2 seconds.
-
-🩺 Doctor
-
-Read-only system health report with actionable recommendations.
-
-⌨️ Interactive TUI
-
-Beautiful arrow-key menu — no mouse needed.
-
-🛡️ Safe by Default
-
-Confirmations before every destructive action and a built-in Dry Run mode.
-
-🚀 Installation
-
-Pristine runs entirely on standard bash. No Homebrew, Node, or Python required.
-
-Quick Install (Recommended):
-
-curl -fsSL [https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/install.sh](https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/install.sh) | bash
-
-
-Manual Install:
-
-curl -fsSL [https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/pristine](https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/pristine) -o pristine
+**Manual install:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/pristine -o pristine
 chmod +x pristine
 sudo mv pristine /usr/local/bin/pristine
+```
 
+**That's it.** No Homebrew, no npm, no Python. Pure bash.
 
-📖 Quick Start
+---
 
-Run the interactive menu by simply typing pristine in your terminal, or use direct commands for specific tasks.
+## 📖 Usage
 
-Core Commands
-
-pristine                      # Launch the beautiful interactive menu
+```bash
+pristine                      # Launch interactive menu
 pristine clean                # Deep clean caches, logs & browser data
 pristine optimize             # Flush DNS, run maintenance, rebuild services
 pristine analyze              # Visualize disk usage (home folder)
@@ -99,92 +75,58 @@ pristine uninstall            # Remove apps + all hidden files
 pristine purge                # Delete build artifacts
 pristine status               # Live system health dashboard
 pristine doctor               # Full health check & recommendations
+```
 
-
-Safety Flags
-
+**Options:**
+```bash
 pristine clean --dry-run      # Preview what would be cleaned (no changes made)
 pristine purge --dry-run      # Preview artifact removal
 pristine --version            # Show version
 pristine --help               # Show all commands
+```
 
+---
 
-🔍 How It Works
+## 🧹 What Gets Cleaned
 
-Keep your README clean! Expand the sections below to see exactly what Pristine targets when you run it.
+`pristine clean` targets:
 
-<details>
-<summary><b>🧹 What gets cleaned during a Deep Clean?</b> <i>(Click to expand)</i></summary>
+- **User caches** — `~/Library/Caches`
+- **System logs** — `~/Library/Logs`, crash reporter logs
+- **Browser caches** — Chrome, Brave, Firefox, Safari
+- **Developer tool caches** — npm, Yarn, pnpm, pip, Composer, Gradle, Maven, Go modules, Cargo
+- **Xcode** — DerivedData, iOS DeviceSupport, Archives
+- **App caches** — Slack, Spotify, VS Code logs, Adobe
+- **Docker** — image cache layers
+- **Trash** — `~/.Trash`
+- **Temp files** — `$TMPDIR`
 
+---
 
+## 🗑 Uninstaller: What It Removes
 
+When you uninstall an app, `pristine uninstall` searches and removes:
 
-pristine clean targets the following areas to free up space safely:
+- The `.app` bundle itself
+- `~/Library/Application Support/<AppName>`
+- `~/Library/Caches/<AppName>`
+- `~/Library/Preferences/<AppName>.plist`
+- `~/Library/Logs/<AppName>`
+- `~/Library/Saved Application State/<AppName>`
+- `~/Library/Containers/<AppName>`
+- `~/Library/Group Containers/*<AppName>*`
+- `~/Library/WebKit/<AppName>`
+- `~/Library/LaunchAgents/<AppName>`
+- `/Library/Application Support/<AppName>`
+- `/Library/LaunchAgents/<AppName>`
+- `/Library/LaunchDaemons/<AppName>`
+- `/Library/PrivilegedHelperTools/<AppName>`
 
-User caches — ~/Library/Caches
+---
 
-System logs — ~/Library/Logs, crash reporter logs
+## ⚡ Status Dashboard
 
-Browser caches — Chrome, Brave, Firefox, Safari
-
-Developer tool caches — npm, Yarn, pnpm, pip, Composer, Gradle, Maven, Go modules, Cargo
-
-Xcode — DerivedData, iOS DeviceSupport, Archives
-
-App caches — Slack, Spotify, VS Code logs, Adobe
-
-Docker — image cache layers
-
-Trash — ~/.Trash
-
-Temp files — $TMPDIR
-
-</details>
-
-<details>
-<summary><b>🗑 What gets removed by the Smart Uninstaller?</b> <i>(Click to expand)</i></summary>
-
-
-
-
-When you uninstall an app, pristine uninstall meticulously searches and removes:
-
-The .app bundle itself
-
-~/Library/Application Support/<AppName>
-
-~/Library/Caches/<AppName>
-
-~/Library/Preferences/<AppName>.plist
-
-~/Library/Logs/<AppName>
-
-~/Library/Saved Application State/<AppName>
-
-~/Library/Containers/<AppName>
-
-~/Library/Group Containers/*<AppName>*
-
-~/Library/WebKit/<AppName>
-
-~/Library/LaunchAgents/<AppName>
-
-/Library/Application Support/<AppName>
-
-/Library/LaunchAgents/<AppName>
-
-/Library/LaunchDaemons/<AppName>
-
-/Library/PrivilegedHelperTools/<AppName>
-
-</details>
-
-📺 Previews
-
-⚡ Status Dashboard
-
-A beautiful, real-time look at your system resources.
-
+```
   PRISTINE STATUS  Health ● 94  MacBook-Pro · Apple M3 Pro · 18GB · macOS 14.5
 
   ⚙  CPU
@@ -207,12 +149,13 @@ A beautiful, real-time look at your system resources.
   WindowServer            8.2%
   Slack                   4.1%
   Chrome Helper           3.8%
+```
 
+---
 
-🔬 Doctor Report
+## 🔬 Doctor Report
 
-Instant health checks with actionable advice.
-
+```
   ✓  Disk space (265GB free)            47% used
   ✓  Memory pressure                    Normal — 58%
   ⚠  Trash                              4.2GB — consider emptying
@@ -222,59 +165,61 @@ Instant health checks with actionable advice.
   ✓  System uptime                      3 days
 
   Passed: 5  Warnings: 2  Critical: 0
+```
 
+---
 
-🛡 Safety & Configuration
+## 🛡 Safety
 
-Pristine is designed to be safe by default. It will never delete files without your explicit permission unless you bypass prompts.
+- **Always confirms** before deleting anything
+- **`--dry-run`** mode on every destructive command — see exactly what would happen
+- **No root required** for most operations (sudo only for DNS flush, maintenance scripts, memory purge)
+- **`doctor`** is completely read-only, safe to run anytime
+- **`analyze`** never deletes anything — browse and understand your disk
 
-Always confirms: You hold the keys. Confirmations are required before deleting anything.
+---
 
-Dry-Run Mode: Use --dry-run on every destructive command to see exactly what would happen before committing.
+## 🧩 Custom Configuration
 
-No Root Required: Most operations work perfectly without sudo (it is only requested for DNS flushes, maintenance scripts, and memory purging).
+**Custom project scan paths for `pristine purge`:**
 
-Read-Only Tools: doctor and analyze are completely read-only. Browse your disk space and check your system health with total peace of mind.
+Create `~/.config/pristine/purge_paths` with one path per line:
 
-Custom Configuration
-
-To set custom project scan paths for pristine purge, create a configuration file at ~/.config/pristine/purge_paths with one path per line:
-
+```
 ~/Documents/Projects
 ~/Work/Clients
 ~/Code
+```
 
+---
 
-🤝 Contributing
+## 🤝 Contributing
 
-PRs are highly welcome! If you are planning a massive change, please open an issue first to discuss it. We'd love help with:
+PRs are welcome! Please open an issue first for big changes.
 
-Additional browser cache paths
+Areas where contributions would be great:
+- Additional browser cache paths
+- New build artifact patterns
+- Improved memory/CPU metric accuracy
+- Windows Subsystem for Linux support
+- Shell completion scripts (zsh, bash, fish)
 
-New build artifact patterns
+---
 
-Improved memory/CPU metric accuracy
+## Star History
 
-Windows Subsystem for Linux (WSL) support
-
-Shell completion scripts (zsh, bash, fish)
-
-📈 Star History
-
-<div align="center">
-<a href="https://www.google.com/search?q=https://star-history.com/%23TheWarrior-tech/pristine%26Date">
-<picture>
-<source media="(prefers-color-scheme: dark)" srcset="https://www.google.com/search?q=https://api.star-history.com/chart%3Frepos%3DTheWarrior-tech/pristine%26type%3DDate%26theme%3Ddark" />
-<source media="(prefers-color-scheme: light)" srcset="https://www.google.com/search?q=https://api.star-history.com/chart%3Frepos%3DTheWarrior-tech/pristine%26type%3DDate" />
-<img alt="Star History Chart" src="https://www.google.com/search?q=https://api.star-history.com/chart%3Frepos%3DTheWarrior-tech/pristine%26type%3DDate" />
-</picture>
+<a href="https://www.star-history.com/?repos=TheWarrior-tech%2Fpristine&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=TheWarrior-tech/pristine&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=TheWarrior-tech/pristine&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=TheWarrior-tech/pristine&type=date&legend=top-left" />
+ </picture>
 </a>
-</div>
 
-<div align="center">
+## License
 
-📄 License
+MIT — free to use, modify, and distribute.
 
-MIT — Free to use, modify, and distribute.
+---
 
-</div>
+*Made with ☕ and a Mac that had 500GB of node_modules.*
