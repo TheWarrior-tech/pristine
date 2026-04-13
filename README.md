@@ -1,18 +1,12 @@
 <div align="center">
 
-✦ Pristine
+✦ PRISTINE
 
-Deep clean and optimize your Mac — from the terminal.
+Deep clean and optimize your Mac — straight from the terminal.
 
-Pristine is a zero-dependency, single-file Mac cleaner that runs entirely in your terminal. 
+Think CleanMyMac meets iStat Menus meets AppCleaner — but free, open-source, and fully inspectable.
 
-
-
-Think CleanMyMac meets iStat Menus meets AppCleaner — but free, open-source, and fully inspectable. 
-
-
-
-No Electron. No subscription. No bloat.
+Zero Dependencies • No Electron • No Subscriptions • No Bloat
 
 </div>
 
@@ -32,7 +26,7 @@ No Electron. No subscription. No bloat.
       doctor      Full system health check & recommendations
 
 
-✨ Features
+✨ Why Pristine?
 
 Feature
 
@@ -74,27 +68,29 @@ Beautiful arrow-key menu — no mouse needed.
 
 Confirmations before every destructive action and a built-in Dry Run mode.
 
-🚀 Install
+🚀 Installation
 
-One-liner:
+Pristine runs entirely on standard bash. No Homebrew, Node, or Python required.
+
+Quick Install (Recommended):
 
 curl -fsSL [https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/install.sh](https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/install.sh) | bash
 
 
-Manual install:
+Manual Install:
 
 curl -fsSL [https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/pristine](https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/pristine) -o pristine
 chmod +x pristine
 sudo mv pristine /usr/local/bin/pristine
 
 
-That's it. No Homebrew, no npm, no Python. Pure bash.
+📖 Quick Start
 
-📖 Usage
+Run the interactive menu by simply typing pristine in your terminal, or use direct commands for specific tasks.
 
 Core Commands
 
-pristine                      # Launch interactive menu
+pristine                      # Launch the beautiful interactive menu
 pristine clean                # Deep clean caches, logs & browser data
 pristine optimize             # Flush DNS, run maintenance, rebuild services
 pristine analyze              # Visualize disk usage (home folder)
@@ -105,7 +101,7 @@ pristine status               # Live system health dashboard
 pristine doctor               # Full health check & recommendations
 
 
-Options
+Safety Flags
 
 pristine clean --dry-run      # Preview what would be cleaned (no changes made)
 pristine purge --dry-run      # Preview artifact removal
@@ -115,9 +111,15 @@ pristine --help               # Show all commands
 
 🔍 How It Works
 
-🧹 What Gets Cleaned
+Keep your README clean! Expand the sections below to see exactly what Pristine targets when you run it.
 
-pristine clean targets the following areas to free up space:
+<details>
+<summary><b>🧹 What gets cleaned during a Deep Clean?</b> <i>(Click to expand)</i></summary>
+
+
+
+
+pristine clean targets the following areas to free up space safely:
 
 User caches — ~/Library/Caches
 
@@ -137,7 +139,13 @@ Trash — ~/.Trash
 
 Temp files — $TMPDIR
 
-🗑 Uninstaller: What It Removes
+</details>
+
+<details>
+<summary><b>🗑 What gets removed by the Smart Uninstaller?</b> <i>(Click to expand)</i></summary>
+
+
+
 
 When you uninstall an app, pristine uninstall meticulously searches and removes:
 
@@ -169,9 +177,13 @@ The .app bundle itself
 
 /Library/PrivilegedHelperTools/<AppName>
 
+</details>
+
 📺 Previews
 
 ⚡ Status Dashboard
+
+A beautiful, real-time look at your system resources.
 
   PRISTINE STATUS  Health ● 94  MacBook-Pro · Apple M3 Pro · 18GB · macOS 14.5
 
@@ -199,6 +211,8 @@ The .app bundle itself
 
 🔬 Doctor Report
 
+Instant health checks with actionable advice.
+
   ✓  Disk space (265GB free)            47% used
   ✓  Memory pressure                    Normal — 58%
   ⚠  Trash                              4.2GB — consider emptying
@@ -212,17 +226,15 @@ The .app bundle itself
 
 🛡 Safety & Configuration
 
-Safety First
+Pristine is designed to be safe by default. It will never delete files without your explicit permission unless you bypass prompts.
 
-Always confirms before deleting anything.
+Always confirms: You hold the keys. Confirmations are required before deleting anything.
 
---dry-run mode on every destructive command — see exactly what would happen before committing.
+Dry-Run Mode: Use --dry-run on every destructive command to see exactly what would happen before committing.
 
-No root required for most operations (sudo is only requested for DNS flush, maintenance scripts, and memory purge).
+No Root Required: Most operations work perfectly without sudo (it is only requested for DNS flushes, maintenance scripts, and memory purging).
 
-doctor is completely read-only and safe to run anytime.
-
-analyze never deletes anything — safely browse and understand your disk space.
+Read-Only Tools: doctor and analyze are completely read-only. Browse your disk space and check your system health with total peace of mind.
 
 Custom Configuration
 
@@ -235,7 +247,7 @@ To set custom project scan paths for pristine purge, create a configuration file
 
 🤝 Contributing
 
-PRs are welcome! Please open an issue first for big changes. Areas where contributions would be highly appreciated:
+PRs are highly welcome! If you are planning a massive change, please open an issue first to discuss it. We'd love help with:
 
 Additional browser cache paths
 
@@ -249,18 +261,20 @@ Shell completion scripts (zsh, bash, fish)
 
 📈 Star History
 
-<a href="https://www.star-history.com/?repos=TheWarrior-tech%2Fpristine&type=date&legend=top-left">
+<div align="center">
+<a href="https://www.google.com/search?q=https://star-history.com/%23TheWarrior-tech/pristine%26Date">
 <picture>
-<source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=TheWarrior-tech/pristine&type=date&theme=dark&legend=top-left" />
-<source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=TheWarrior-tech/pristine&type=date&legend=top-left" />
-<img alt="Star History Chart" src="https://api.star-history.com/chart?repos=TheWarrior-tech/pristine&type=date&legend=top-left" />
+<source media="(prefers-color-scheme: dark)" srcset="https://www.google.com/search?q=https://api.star-history.com/chart%3Frepos%3DTheWarrior-tech/pristine%26type%3DDate%26theme%3Ddark" />
+<source media="(prefers-color-scheme: light)" srcset="https://www.google.com/search?q=https://api.star-history.com/chart%3Frepos%3DTheWarrior-tech/pristine%26type%3DDate" />
+<img alt="Star History Chart" src="https://www.google.com/search?q=https://api.star-history.com/chart%3Frepos%3DTheWarrior-tech/pristine%26type%3DDate" />
 </picture>
 </a>
+</div>
+
+<div align="center">
 
 📄 License
 
-MIT — free to use, modify, and distribute.
+MIT — Free to use, modify, and distribute.
 
-<div align="center">
-<i>Made with ☕ and a Mac that had 500GB of node_modules.</i>
 </div>
