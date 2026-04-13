@@ -2,7 +2,7 @@
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  PRISTINE — Deep clean and optimize your Mac                ║
 # ║  Version 1.0.0 · MIT License                                ║
-# ║  https://github.com/yourusername/pristine                    ║
+# ║  https://github.com/TheWarrior-tech/pristine                    ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 set -uo pipefail
