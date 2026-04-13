@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════
 #  Pristine Installer
-#  Usage: curl -fsSL https://raw.githubusercontent.com/yourusername/pristine/main/install.sh | bash
+#  Usage: curl -fsSL https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/install.sh | bash
 # ═══════════════════════════════════════════════════
 
 set -euo pipefail
 
 VERSION="1.0.0"
-REPO="yourusername/pristine"
+REPO="TheWarrior-tech/pristine"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="pristine"
 
