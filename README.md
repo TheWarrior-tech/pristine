@@ -49,12 +49,12 @@ Pristine is a **zero-dependency**, single-file Mac cleaner that runs entirely in
 
 **One-liner:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/pristine/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/install.sh | bash
 ```
 
 **Manual install:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/pristine/main/pristine -o pristine
+curl -fsSL https://raw.githubusercontent.com/TheWarrior-tech/pristine/main/pristine -o pristine
 chmod +x pristine
 sudo mv pristine /usr/local/bin/pristine
 ```
