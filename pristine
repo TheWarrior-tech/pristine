@@ -1,482 +1,477 @@
 #!/usr/bin/env bash
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  PRISTINE — Deep clean and optimize your Mac                ║
-# ║  Version 1.0.1 · MIT License                                ║
-# ║  https://github.com/TheWarrior-tech/pristine                ║
+# ║  PRISTINE — Deep clean and optimize your Mac                 ║
+# ║  Version 2.0.0 · MIT License                                 ║
+# ║  https://github.com/TheWarrior-tech/pristine                 ║
 # ╚══════════════════════════════════════════════════════════════╝
+# Pure bash · Zero dependencies · macOS only
 
 set -uo pipefail
-
-VERSION="1.0.1"
+VERSION="2.0.0"
 DRY_RUN=false
-DEBUG=false
 
-# ── Guard: macOS only ──────────────────────────────────────────
-require_macos() {
-  [[ "$(uname)" == "Darwin" ]] || { echo "Pristine requires macOS." >&2; exit 1; }
-}
+# ─── macOS guard ────────────────────────────────────────────────
+[[ "$(uname -s)" == "Darwin" ]] || { echo "Pristine requires macOS." >&2; exit 1; }
 
-# ── Colors — use printf '\033' to get real ESC char ────────────
-setup_colors() {
-  if [[ -t 1 ]]; then
-    local e
-    e=$(printf '\033')
-    BOLD="${e}[1m";    DIM="${e}[2m";      RESET="${e}[0m"
-    RED="${e}[0;31m";  GREEN="${e}[0;32m"; YELLOW="${e}[0;33m"
-    BLUE="${e}[0;34m"; CYAN="${e}[0;36m";  WHITE="${e}[0;37m"
-    BRED="${e}[1;31m"; BGREEN="${e}[1;32m";BYELLOW="${e}[1;33m"
-    BBLUE="${e}[1;34m";BCYAN="${e}[1;36m"; BWHITE="${e}[1;37m"
-    BG_CYAN="${e}[46m";BG_BLUE="${e}[44m"
-  else
-    BOLD=""; DIM=""; RESET=""; RED=""; GREEN=""; YELLOW=""
-    BLUE=""; CYAN=""; WHITE=""; BRED=""; BGREEN=""; BYELLOW=""
-    BBLUE=""; BCYAN=""; BWHITE=""; BG_CYAN=""; BG_BLUE=""
-  fi
-}
-setup_colors
+# ─── Colors (ESC via printf — works in all contexts) ────────────
+_e=$(printf '\033')
+R="${_e}[0m"     BLD="${_e}[1m"   DIM="${_e}[2m"
+RED="${_e}[31m"  GRN="${_e}[32m"  YLW="${_e}[33m"
+BLU="${_e}[34m"  CYN="${_e}[36m"  WHT="${_e}[37m"
+BRED="${_e}[1;31m" BGRN="${_e}[1;32m" BYLW="${_e}[1;33m"
+BCYN="${_e}[1;36m" BWHT="${_e}[1;37m"
 
-# ── Print Helpers ──────────────────────────────────────────────
-hr()      { local c="${1:-═}" w="${2:-62}"; printf '%*s\n' "$w" '' | tr ' ' "$c"; }
-p_ok()    { printf "  ${GREEN}✓${RESET}  %s\n" "$*"; }
-p_info()  { printf "  ${CYAN}→${RESET}  %s\n" "$*"; }
-p_warn()  { printf "  ${YELLOW}⚠${RESET}  %s\n" "$*"; }
-p_err()   { printf "  ${RED}✗${RESET}  %s\n" "$*" >&2; }
+# ─── Helpers ────────────────────────────────────────────────────
+hr()    { printf '%*s\n' "${1:-60}" '' | tr ' ' "${2:-─}"; }
+ok()    { printf "  ${GRN}✓${R}  %s\n"  "$*"; }
+info()  { printf "  ${CYN}→${R}  %s\n"  "$*"; }
+warn()  { printf "  ${YLW}⚠${R}  %s\n"  "$*"; }
+err()   { printf "  ${RED}✗${R}  %s\n"  "$*" >&2; }
+skip()  { printf "  ${DIM}–${R}  ${DIM}%s${R}\n" "$*"; }
 
-section() {
-  printf "\n  ${BWHITE}%s${RESET}\n  ${DIM}%s${RESET}\n" "$1" "$(hr '─' 58)"
-}
-
+# ─── Banner ─────────────────────────────────────────────────────
 banner() {
+  local host os mem chip
+  host=$(hostname -s 2>/dev/null || echo "Mac")
+  os=$(sw_vers -productVersion 2>/dev/null || echo "macOS")
+  mem=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%dGB",$1/1073741824}')
+  chip=$(sysctl -n machdep.cpu.brand_string 2>/dev/null | sed 's/Apple //' | cut -c1-20 || echo "Apple Silicon")
   printf "\n"
-  printf "  ${BCYAN}╔═══════════════════════════════════════════════════╗${RESET}\n"
-  printf "  ${BCYAN}║${RESET}   ${BWHITE}✦  PRISTINE${RESET}  ${DIM}— Deep clean your Mac${RESET}             ${BCYAN}║${RESET}\n"
-  printf "  ${BCYAN}╚═══════════════════════════════════════════════════╝${RESET}\n"
-  printf "  ${DIM}v%s · Safe by default · Zero dependencies${RESET}\n\n" "$VERSION"
+  printf "  ${BCYN}┌─────────────────────────────────────────────────────┐${R}\n"
+  printf "  ${BCYN}│${R}  ${BWHT}✦ PRISTINE${R}  ${DIM}Deep clean & optimize your Mac${R}         ${BCYN}│${R}\n"
+  printf "  ${BCYN}│${R}  ${DIM}v%s  ·  %s  ·  %s  ·  macOS %s${R}  ${BCYN}│${R}\n" \
+    "$VERSION" "$host" "$chip" "$os"
+  printf "  ${BCYN}└─────────────────────────────────────────────────────┘${R}\n\n"
 }
 
-# ── Format KB sizes to human readable ─────────────────────────
+# ─── Format bytes/KB ────────────────────────────────────────────
 fmt_kb() {
-  awk -v kb="$1" 'BEGIN{
-    if      (kb >= 1048576) printf "%.1fGB", kb/1048576
-    else if (kb >= 1024)    printf "%.1fMB", kb/1024
-    else if (kb > 0)        printf "%dKB",   kb
-    else                    printf "0B"
+  awk -v k="${1:-0}" 'BEGIN{
+    if      (k>=1048576) printf "%.1f GB", k/1048576
+    else if (k>=1024)    printf "%.1f MB", k/1024
+    else if (k>0)        printf "%d KB",   k
+    else                 printf "0 B"
   }'
 }
 
-fmt_bytes() {
-  awk -v b="$1" 'BEGIN{
-    if      (b >= 1073741824) printf "%.1fGB", b/1073741824
-    else if (b >= 1048576)    printf "%.1fMB", b/1048576
-    else if (b >= 1024)       printf "%.1fKB", b/1024
-    else                      printf "%dB",    b
-  }'
+# ─── Progress bar (no seq — pure string) ────────────────────────
+bar() {
+  local pct="${1:-0}" w="${2:-22}" color="${3:-$GRN}" b="" e="" i
+  local f=$(awk -v p="$pct" -v w="$w" 'BEGIN{x=int(p*w/100);if(x>w)x=w;if(x<0)x=0;print x}')
+  local m=$(( w - f ))
+  for ((i=0;i<f;i++)); do b+="█"; done
+  for ((i=0;i<m;i++)); do e+="░"; done
+  printf "${color}%s${R}${DIM}%s${R}" "$b" "$e"
 }
 
-# ── Visual percentage bar ──────────────────────────────────────
-pct_bar() {
-  local pct="$1" width="${2:-24}"
-  local filled
-  filled=$(awk -v p="$pct" -v w="$width" 'BEGIN{x=int(p*w/100); if(x>w)x=w; if(x<0)x=0; print x}')
-  local empty=$(( width - filled ))
-  [[ $filled -gt 0 ]] && printf "${GREEN}"; printf '%0.s█' $(seq 1 $filled 2>/dev/null) 2>/dev/null; printf "${RESET}"
-  [[ $empty  -gt 0 ]] && printf "${DIM}";   printf '%0.s░' $(seq 1 $empty  2>/dev/null) 2>/dev/null; printf "${RESET}"
+# ─── Spinner (background-friendly) ──────────────────────────────
+SPIN_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+spin_idx=0
+spin_tick() {
+  printf "\r  ${CYN}%s${R}  %s   " "${SPIN_FRAMES[$spin_idx]}" "$1"
+  spin_idx=$(( (spin_idx+1) % 10 ))
+}
+spin_done() { printf "\r%*s\r" "$(tput cols 2>/dev/null || echo 80)" ""; }
+
+# ─── Read a key from the terminal ───────────────────────────────
+read_key() {
+  local k seq
+  IFS= read -r -s -n1 k </dev/tty 2>/dev/null || true
+  if [[ "$k" == $'\x1b' ]]; then
+    IFS= read -r -s -n2 -t 0.1 seq </dev/tty 2>/dev/null || true
+    k+="$seq"
+  fi
+  printf '%s' "$k"
 }
 
-# ── Confirm prompt ─────────────────────────────────────────────
+# ─── Confirm prompt ─────────────────────────────────────────────
 confirm() {
-  printf "  ${BYELLOW}?${RESET}  %s ${DIM}[y/N]${RESET} " "$1"
-  local ans; read -r ans </dev/tty
-  [[ "$ans" =~ ^[Yy]$ ]]
+  printf "  ${BYLW}?${R}  %s ${DIM}[y/N]${R} " "$1"
+  local a; IFS= read -r a </dev/tty 2>/dev/null || a=""
+  [[ "$a" =~ ^[Yy]$ ]]
 }
 
-# ── Disk size of a path ────────────────────────────────────────
-dir_size_kb() { du -sk "$1" 2>/dev/null | awk '{print $1+0}'; }
+# ─── dir_size_kb: fast, with timeout fallback ───────────────────
+dir_size_kb() {
+  [[ -e "$1" ]] || { echo 0; return; }
+  du -sk "$1" 2>/dev/null | awk '{print $1+0}' || echo 0
+}
 
-# ── Check if we can sudo without a password ────────────────────
-can_sudo() { sudo -n true 2>/dev/null; }
+# ─── count_files_kb: size of matching files in dir ──────────────
+files_size_kb() {
+  local dir="$1" pattern="$2"
+  [[ -d "$dir" ]] || { echo 0; return; }
+  find "$dir" -maxdepth "${3:-3}" -name "$pattern" -type f 2>/dev/null \
+    | xargs du -sk 2>/dev/null | awk '{s+=$1} END{print s+0}'
+}
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  CLEAN                                                       ║
-# ╚══════════════════════════════════════════════════════════════╝
-
+# ══════════════════════════════════════════════════════════════════
+#  CLEAN  — Scan → Show breakdown → Confirm → Execute
+# ══════════════════════════════════════════════════════════════════
 cmd_clean() {
-  require_macos
   banner
-  section "Scanning Cache Directories"
-  [[ "$DRY_RUN" == true ]] && p_warn "Dry run — no files will be deleted"
-  echo ""
+  printf "  ${BWHT}Scanning your Mac...${R}  ${DIM}(measuring everything before touching anything)${R}\n\n"
+  [[ "$DRY_RUN" == true ]] && warn "DRY RUN — nothing will be deleted"
 
-  local names=() paths=()
+  # ── Category: System Junk ──────────────────────────────────────
+  local SYS_names=() SYS_paths=() SYS_kb=() SYS_total=0
 
-  _add() { names+=("$1"); paths+=("$2"); }
+  _sys() {  # name path
+    spin_tick "Scanning: $1"
+    local kb; kb=$(dir_size_kb "$2")
+    if [[ $kb -gt 0 ]]; then
+      SYS_names+=("$1"); SYS_paths+=("$2"); SYS_kb+=("$kb")
+      SYS_total=$(( SYS_total + kb ))
+    fi
+  }
+  _sys "User caches"              "$HOME/Library/Caches"
+  _sys "System logs"              "$HOME/Library/Logs"
+  _sys "Crash reports"            "$HOME/Library/Logs/DiagnosticReports"
+  _sys "Global crash reports"     "/Library/Logs/DiagnosticReports"
+  _sys "Temp files"               "${TMPDIR:-/private/tmp}"
+  _sys "Font caches"              "/Library/Caches/com.apple.FontRegistry"
+  _sys "Spotlight store"          "$HOME/Library/Metadata/CoreSpotlight"
+  _sys "Quick Look cache"         "$HOME/Library/Caches/com.apple.QuickLook.thumbnailcache"
+  _sys "Trash"                    "$HOME/.Trash"
+  _sys "Old iOS backups"          "$HOME/Library/Application Support/MobileSync/Backup"
+  _sys "iOS software updates"     "$HOME/Library/iTunes/iPhone Software Updates"
 
-  _add "User application caches"       "$HOME/Library/Caches"
-  _add "System log files"              "$HOME/Library/Logs"
-  _add "Crash reporter logs"           "$HOME/Library/Logs/DiagnosticReports"
-  _add "Temporary files"              "${TMPDIR:-/tmp}"
-  _add "Chrome browser cache"          "$HOME/Library/Application Support/Google/Chrome/Default/Cache"
-  _add "Chrome GPU cache"              "$HOME/Library/Application Support/Google/Chrome/Default/GPUCache"
-  _add "Brave browser cache"           "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/Default/Cache"
-  _add "Firefox profiles cache"        "$HOME/Library/Application Support/Firefox/Profiles"
-  _add "Safari cache"                  "$HOME/Library/Caches/com.apple.Safari"
-  _add "npm cache"                     "$HOME/.npm/_cacache"
-  _add "Yarn cache"                    "$HOME/Library/Caches/Yarn"
-  _add "pnpm store"                    "$HOME/Library/pnpm/store"
-  _add "pip cache"                     "$HOME/Library/Caches/pip"
-  _add "Composer cache"                "$HOME/Library/Caches/composer"
-  _add "Gradle build cache"            "$HOME/.gradle/caches"
-  _add "Maven repository cache"        "$HOME/.m2/repository"
-  _add "Go module cache"               "$HOME/go/pkg/mod/cache"
-  _add "Rust cargo registry"           "$HOME/.cargo/registry/cache"
-  _add "Xcode DerivedData"             "$HOME/Library/Developer/Xcode/DerivedData"
-  _add "Xcode iOS DeviceSupport"       "$HOME/Library/Developer/Xcode/iOS DeviceSupport"
-  _add "Xcode Archives"                "$HOME/Library/Developer/Xcode/Archives"
-  _add "CoreSimulator caches"          "$HOME/Library/Developer/CoreSimulator/Caches"
-  _add "Homebrew downloads cache"      "$(brew --cache 2>/dev/null || echo '/dev/null/no_brew')"
-  _add "Docker container data"         "$HOME/Library/Containers/com.docker.docker/Data/vms"
-  _add "Slack cache"                   "$HOME/Library/Application Support/Slack/Cache"
-  _add "Spotify cache"                 "$HOME/Library/Application Support/Spotify/Data"
-  _add "VS Code logs"                  "$HOME/Library/Application Support/Code/logs"
-  _add "Adobe media cache"             "$HOME/Library/Application Support/Adobe/Common/Media Cache Files"
-  _add "Trash"                         "$HOME/.Trash"
+  # ── Category: Browser Caches ──────────────────────────────────
+  local BRW_names=() BRW_paths=() BRW_kb=() BRW_total=0
 
-  local found_names=() found_paths=() found_sizes=()
-  local total_kb=0
+  _brw() {
+    spin_tick "Scanning: $1"
+    local kb; kb=$(dir_size_kb "$2")
+    if [[ $kb -gt 0 ]]; then
+      BRW_names+=("$1"); BRW_paths+=("$2"); BRW_kb+=("$kb")
+      BRW_total=$(( BRW_total + kb ))
+    fi
+  }
+  _brw "Chrome — Cache"           "$HOME/Library/Application Support/Google/Chrome/Default/Cache"
+  _brw "Chrome — GPU cache"       "$HOME/Library/Application Support/Google/Chrome/Default/GPUCache"
+  _brw "Chrome — Code cache"      "$HOME/Library/Application Support/Google/Chrome/Default/Code Cache"
+  _brw "Chrome — Media cache"     "$HOME/Library/Application Support/Google/Chrome/Default/Media Cache"
+  _brw "Chrome Canary — Cache"    "$HOME/Library/Application Support/Google/Chrome Canary/Default/Cache"
+  _brw "Brave — Cache"            "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/Default/Cache"
+  _brw "Brave — GPU cache"        "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/Default/GPUCache"
+  _brw "Firefox — Cache"          "$HOME/Library/Caches/Firefox"
+  _brw "Firefox — Profiles"       "$HOME/Library/Application Support/Firefox/Profiles"
+  _brw "Safari — Cache"           "$HOME/Library/Caches/com.apple.Safari"
+  _brw "Safari — History"         "$HOME/Library/Safari/History.db-shm"
+  _brw "Edge — Cache"             "$HOME/Library/Application Support/Microsoft Edge/Default/Cache"
+  _brw "Arc — Cache"              "$HOME/Library/Application Support/Arc/User Data/Default/Cache"
+  _brw "Opera — Cache"            "$HOME/Library/Application Support/com.operasoftware.Opera/Default/Cache"
 
-  for i in "${!names[@]}"; do
-    local p="${paths[$i]}"
-    [[ -d "$p" || -f "$p" ]] || continue
-    local kb; kb=$(dir_size_kb "$p")
-    [[ "$kb" -gt 0 ]] || continue
-    found_names+=("${names[$i]}")
-    found_paths+=("$p")
-    found_sizes+=("$kb")
-    total_kb=$(( total_kb + kb ))
-    printf "  ${GREEN}✓${RESET}  %-44s  ${BWHITE}%8s${RESET}\n" "${names[$i]}" "$(fmt_kb "$kb")"
-  done
+  # ── Category: Developer Caches ────────────────────────────────
+  local DEV_names=() DEV_paths=() DEV_kb=() DEV_total=0
 
-  if [[ ${#found_names[@]} -eq 0 ]]; then
-    echo ""
-    p_ok "Nothing to clean — your Mac is already spotless!"
-    return
-  fi
+  _dev() {
+    spin_tick "Scanning: $1"
+    local kb; kb=$(dir_size_kb "$2")
+    if [[ $kb -gt 0 ]]; then
+      DEV_names+=("$1"); DEV_paths+=("$2"); DEV_kb+=("$kb")
+      DEV_total=$(( DEV_total + kb ))
+    fi
+  }
+  _dev "npm cache"                "$HOME/.npm/_cacache"
+  _dev "Yarn cache"               "$HOME/Library/Caches/Yarn"
+  _dev "pnpm store"               "$HOME/Library/pnpm/store"
+  _dev "pnpm cache"               "$HOME/.pnpm-store"
+  _dev "Bun cache"                "$HOME/Library/Caches/bun"
+  _dev "pip cache"                "$HOME/Library/Caches/pip"
+  _dev "pip3 cache"               "$HOME/Library/Caches/pip3"
+  _dev "uv cache"                 "$HOME/Library/Caches/uv"
+  _dev "Pipenv cache"             "$HOME/.cache/pipenv"
+  _dev "Composer cache"           "$HOME/Library/Caches/composer"
+  _dev "Gradle caches"            "$HOME/.gradle/caches"
+  _dev "Gradle daemons"           "$HOME/.gradle/daemon"
+  _dev "Maven repository"         "$HOME/.m2/repository"
+  _dev "Go module cache"          "$HOME/go/pkg/mod/cache"
+  _dev "Cargo registry"           "$HOME/.cargo/registry/cache"
+  _dev "Cargo build cache"        "$HOME/.cargo/target"
+  _dev "Ruby gems cache"          "$HOME/Library/Caches/Homebrew/ruby"
+  _dev "CocoaPods cache"          "$HOME/Library/Caches/CocoaPods"
+  _dev "Swift Package cache"      "$HOME/Library/Developer/Xcode/DerivedData"
+  _dev "Homebrew downloads"       "$(brew --cache 2>/dev/null || echo '/nonexistent')"
+  _dev "Homebrew logs"            "$(brew --prefix 2>/dev/null || echo '/usr/local')/var/log"
+  _dev "Docker volumes/cache"     "$HOME/Library/Containers/com.docker.docker/Data/vms"
+  _dev "Rust target cache"        "$HOME/.rustup/toolchains"
 
-  echo ""
-  printf "  ${DIM}%s${RESET}\n" "$(hr '═' 58)"
-  printf "  ${BWHITE}Total recoverable: ${BGREEN}%-10s${RESET}  ${DIM}%d locations${RESET}\n" \
-    "$(fmt_kb "$total_kb")" "${#found_names[@]}"
-  printf "  ${DIM}%s${RESET}\n\n" "$(hr '═' 58)"
+  # ── Category: Xcode & iOS ─────────────────────────────────────
+  local XC_names=() XC_paths=() XC_kb=() XC_total=0
 
-  if [[ "$DRY_RUN" == true ]]; then
-    p_info "Dry run complete. Run without --dry-run to actually clean."
-    return
-  fi
+  _xc() {
+    spin_tick "Scanning: $1"
+    local kb; kb=$(dir_size_kb "$2")
+    if [[ $kb -gt 0 ]]; then
+      XC_names+=("$1"); XC_paths+=("$2"); XC_kb+=("$kb")
+      XC_total=$(( XC_total + kb ))
+    fi
+  }
+  _xc "Xcode DerivedData"         "$HOME/Library/Developer/Xcode/DerivedData"
+  _xc "Xcode Archives"            "$HOME/Library/Developer/Xcode/Archives"
+  _xc "Xcode iOS DeviceSupport"   "$HOME/Library/Developer/Xcode/iOS DeviceSupport"
+  _xc "Xcode watchOS DevSupport"  "$HOME/Library/Developer/Xcode/watchOS DeviceSupport"
+  _xc "Xcode tvOS DevSupport"     "$HOME/Library/Developer/Xcode/tvOS DeviceSupport"
+  _xc "CoreSimulator caches"      "$HOME/Library/Developer/CoreSimulator/Caches"
+  _xc "CoreSimulator devices"     "$HOME/Library/Developer/CoreSimulator/Devices"
+  _xc "Xcode previews"            "$HOME/Library/Developer/Xcode/UserData/Previews"
+  _xc "Xcode logs"                "$HOME/Library/Logs/CoreSimulator"
 
-  confirm "Clean all ${#found_names[@]} cache locations ($(fmt_kb "$total_kb"))?" || {
-    p_info "Aborted."
-    return
+  # ── Category: App Caches ──────────────────────────────────────
+  local APP_names=() APP_paths=() APP_kb=() APP_total=0
+
+  _app() {
+    spin_tick "Scanning: $1"
+    local kb; kb=$(dir_size_kb "$2")
+    if [[ $kb -gt 0 ]]; then
+      APP_names+=("$1"); APP_paths+=("$2"); APP_kb+=("$kb")
+      APP_total=$(( APP_total + kb ))
+    fi
+  }
+  _app "Slack cache"              "$HOME/Library/Application Support/Slack/Cache"
+  _app "Slack logs"               "$HOME/Library/Application Support/Slack/logs"
+  _app "Spotify cache"            "$HOME/Library/Application Support/Spotify/Data"
+  _app "Spotify storage"          "$HOME/Library/Application Support/Spotify/PersistentCache"
+  _app "Discord cache"            "$HOME/Library/Application Support/discord/Cache"
+  _app "Teams cache"              "$HOME/Library/Application Support/Microsoft/Teams/Cache"
+  _app "Zoom cache"               "$HOME/Library/Application Support/zoom.us/Cache"
+  _app "VS Code logs"             "$HOME/Library/Application Support/Code/logs"
+  _app "VS Code crash reports"    "$HOME/Library/Application Support/Code/CrashReports"
+  _app "Cursor logs"              "$HOME/Library/Application Support/Cursor/logs"
+  _app "Adobe media cache"        "$HOME/Library/Application Support/Adobe/Common/Media Cache Files"
+  _app "Adobe disk cache"         "$HOME/Library/Application Support/Adobe/Common/Media Cache"
+  _app "Figma cache"              "$HOME/Library/Application Support/Figma/Desktop Cache"
+  _app "iTerm2 cache"             "$HOME/Library/Application Support/iTerm2"
+  _app "Notion cache"             "$HOME/Library/Application Support/Notion/Cache"
+  _app "Dropbox cache"            "$HOME/.dropbox"
+  _app "Telegram cache"           "$HOME/Library/Application Support/Telegram Desktop/tdata"
+  _app "WhatsApp cache"           "$HOME/Library/Application Support/WhatsApp/Cache"
+
+  spin_done
+
+  # ── Grand total ────────────────────────────────────────────────
+  local GRAND_TOTAL=$(( SYS_total + BRW_total + DEV_total + XC_total + APP_total ))
+
+  # ── Display breakdown ──────────────────────────────────────────
+  _section_header() {
+    local label="$1" total_kb="$2" icon="$3"
+    local human; human=$(fmt_kb "$total_kb")
+    printf "  ${BWHT}%s %s${R}  ${DIM}─────────────────────────────────${R}  ${BGRN}%s${R}\n" \
+      "$icon" "$label" "$human"
   }
 
-  section "Cleaning"
-  echo ""
+  _item_row() {
+    local name="$1" kb="$2" grand="$3"
+    local human; human=$(fmt_kb "$kb")
+    local pct; pct=$(awk -v k="$kb" -v g="$grand" 'BEGIN{if(g>0)printf "%.0f",k*100/g; else print 0}')
+    local b; b=$(bar "$pct" 16 "$GRN")
+    printf "    ${DIM}•${R} %-42s  ${BWHT}%8s${R}  %s\n" "${name:0:42}" "$human" "$b"
+  }
 
-  local freed_kb=0
-  for i in "${!found_paths[@]}"; do
-    local p="${found_paths[$i]}"
-    local kb="${found_sizes[$i]}"
-    printf "  ${CYAN}→${RESET}  %-46s" "${found_names[$i]}..."
-    if rm -rf "${p:?}"/* 2>/dev/null; then
-      printf "  ${GREEN}freed %-8s${RESET}\n" "$(fmt_kb "$kb")"
-      freed_kb=$(( freed_kb + kb ))
-    else
-      printf "  ${YELLOW}skipped${RESET}\n"
-    fi
-  done
+  [[ $SYS_total -gt 0 ]] && {
+    _section_header "System Junk" "$SYS_total" "🗑"
+    for i in "${!SYS_names[@]}"; do _item_row "${SYS_names[$i]}" "${SYS_kb[$i]}" "$GRAND_TOTAL"; done
+    echo ""
+  }
+
+  [[ $BRW_total -gt 0 ]] && {
+    _section_header "Browser Caches" "$BRW_total" "🌐"
+    for i in "${!BRW_names[@]}"; do _item_row "${BRW_names[$i]}" "${BRW_kb[$i]}" "$GRAND_TOTAL"; done
+    echo ""
+  }
+
+  [[ $DEV_total -gt 0 ]] && {
+    _section_header "Developer Caches" "$DEV_total" "⚙️"
+    for i in "${!DEV_names[@]}"; do _item_row "${DEV_names[$i]}" "${DEV_kb[$i]}" "$GRAND_TOTAL"; done
+    echo ""
+  }
+
+  [[ $XC_total -gt 0 ]] && {
+    _section_header "Xcode & iOS" "$XC_total" "📱"
+    for i in "${!XC_names[@]}"; do _item_row "${XC_names[$i]}" "${XC_kb[$i]}" "$GRAND_TOTAL"; done
+    echo ""
+  }
+
+  [[ $APP_total -gt 0 ]] && {
+    _section_header "App Caches" "$APP_total" "📦"
+    for i in "${!APP_names[@]}"; do _item_row "${APP_names[$i]}" "${APP_kb[$i]}" "$GRAND_TOTAL"; done
+    echo ""
+  }
+
+  if [[ $GRAND_TOTAL -eq 0 ]]; then
+    ok "Nothing to clean — your Mac is already spotless!"; echo ""; return
+  fi
+
+  # ── Summary bar ────────────────────────────────────────────────
+  local disk_free disk_total disk_pct
+  disk_free=$(df -k / 2>/dev/null | awk 'NR==2{print $4+0}')
+  disk_total=$(df -k / 2>/dev/null | awk 'NR==2{print $2+0}')
+  disk_pct=$(awk -v f="$disk_free" -v t="$disk_total" \
+    'BEGIN{if(t>0)printf "%.0f",f*100/t; else print 0}')
+  local new_free=$(( disk_free + GRAND_TOTAL ))
+  local new_pct=$(awk -v f="$new_free" -v t="$disk_total" \
+    'BEGIN{if(t>0)printf "%.0f",f*100/t; else print 0}')
+
+  printf "  ${DIM}%s${R}\n" "$(hr 56 '═')"
+  printf "  ${BWHT}Reclaimable space: ${BGRN}%-12s${R}   " "$(fmt_kb "$GRAND_TOTAL")"
+  printf "${DIM}Disk free: %s → %s${R}\n" "$(fmt_kb "$disk_free")" "$(fmt_kb "$new_free")"
+  printf "  Before  $(bar "$disk_pct" 22 "$YLW")  ${DIM}%s%%${R}\n" "$disk_pct"
+  printf "  After   $(bar "$new_pct"  22 "$GRN")  ${DIM}%s%%${R}\n" "$new_pct"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '═')"
+
+  [[ "$DRY_RUN" == true ]] && { info "Dry run — run without --dry-run to clean."; echo ""; return; }
+
+  confirm "Clean all $(( ${#SYS_names[@]} + ${#BRW_names[@]} + ${#DEV_names[@]} + ${#XC_names[@]} + ${#APP_names[@]} )) locations and free $(fmt_kb "$GRAND_TOTAL")?" || {
+    info "Aborted — nothing changed."; echo ""; return
+  }
+
+  echo ""
+  printf "  ${BWHT}Cleaning...${R}\n\n"
+
+  _clean_set() {
+    local -n _names="$1" _paths="$2" _sizes="$3"
+    local freed=0
+    for i in "${!_paths[@]}"; do
+      local p="${_paths[$i]}" kb="${_sizes[$i]}"
+      printf "  ${CYN}→${R}  %-48s" "${_names[$i]:0:48}..."
+      if rm -rf "${p:?}"/* 2>/dev/null || rm -rf "${p:?}" 2>/dev/null; then
+        printf "  ${GRN}✓  freed %s${R}\n" "$(fmt_kb "$kb")"
+        freed=$(( freed + kb ))
+      else
+        printf "  ${YLW}skipped${R}\n"
+      fi
+    done
+    echo "$freed"
+  }
+
+  local total_freed=0
+  local f
+  f=$(_clean_set SYS_names SYS_paths SYS_kb);   total_freed=$(( total_freed + f ))
+  f=$(_clean_set BRW_names BRW_paths BRW_kb);   total_freed=$(( total_freed + f ))
+  f=$(_clean_set DEV_names DEV_paths DEV_kb);   total_freed=$(( total_freed + f ))
+  f=$(_clean_set XC_names  XC_paths  XC_kb);    total_freed=$(( total_freed + f ))
+  f=$(_clean_set APP_names APP_paths APP_kb);   total_freed=$(( total_freed + f ))
 
   local now_free; now_free=$(df -k / 2>/dev/null | awk 'NR==2{print $4+0}')
   echo ""
-  printf "  ${DIM}%s${RESET}\n" "$(hr '═' 58)"
-  printf "  ${BGREEN}✓ Space freed: %-10s${RESET}  ${DIM}Free now: %s${RESET}\n" \
-    "$(fmt_kb "$freed_kb")" "$(fmt_kb "$now_free")"
-  printf "  ${DIM}%s${RESET}\n\n" "$(hr '═' 58)"
+  printf "  ${DIM}%s${R}\n" "$(hr 56 '═')"
+  printf "  ${BGRN}✓ Done! Freed: %-12s${R}  ${DIM}Free space now: %s${R}\n" \
+    "$(fmt_kb "$total_freed")" "$(fmt_kb "$now_free")"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '═')"
 }
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  OPTIMIZE                                                    ║
-# ╚══════════════════════════════════════════════════════════════╝
-
+# ══════════════════════════════════════════════════════════════════
+#  OPTIMIZE
+# ══════════════════════════════════════════════════════════════════
 cmd_optimize() {
-  require_macos
   banner
-  section "System Optimization"
-  [[ "$DRY_RUN" == true ]] && p_warn "Dry run — no changes will be made"
+  printf "  ${BWHT}System Optimization${R}\n"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '─')"
+  [[ "$DRY_RUN" == true ]] && warn "DRY RUN — no changes will be made"
 
-  # Show system summary
-  local disk_used disk_total mem_gb uptime_str os_ver
-  disk_used=$(df -k / 2>/dev/null | awk 'NR==2{print $3+0}')
-  disk_total=$(df -k / 2>/dev/null | awk 'NR==2{print $2+0}')
-  mem_gb=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%dGB", $1/1073741824}')
-  uptime_str=$(uptime 2>/dev/null | awk -F'up ' '{print $2}' | awk -F',' '{print $1}' | xargs)
-  os_ver=$(sw_vers -productVersion 2>/dev/null)
+  # System info
+  local os mem up
+  os=$(sw_vers -productVersion 2>/dev/null)
+  mem=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%dGB",$1/1073741824}')
+  up=$(uptime 2>/dev/null | awk -F'up ' '{print $2}' | awk -F', [0-9]+ user' '{print $1}' | xargs)
+  printf "  ${DIM}macOS %s · %s RAM · Uptime: %s${R}\n\n" "$os" "$mem" "$up"
 
-  printf "\n  ${DIM}macOS %s · %s RAM · Disk %s used · Uptime: %s${RESET}\n\n" \
-    "$os_ver" "$mem_gb" "$(fmt_kb "$disk_used")" "$uptime_str"
+  _step() {
+    local name="$1"; shift
+    printf "  ${CYN}→${R}  %-52s" "$name..."
+    if [[ "$DRY_RUN" == true ]]; then printf "${DIM}dry-run${R}\n"; return; fi
+    if eval "$*" &>/dev/null 2>&1; then printf "${GRN}✓${R}\n"
+    else printf "${YLW}skipped${R}\n"; fi
+  }
 
-  # Non-sudo steps (run always)
-  local -a steps=(
-    "Rebuild Dock|killall Dock"
-    "Restart Finder|killall Finder"
-    "Clear old .DS_Store files|find ~ -name '.DS_Store' -type f -delete"
-    "Remove download quarantine flags|xattr -d -r com.apple.quarantine ~/Downloads"
-    "Rebuild Launch Services database|/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user"
-  )
+  _step "Restart Finder" "killall Finder"
+  _step "Restart Dock" "killall Dock"
+  _step "Restart SystemUIServer" "killall SystemUIServer"
+  _step "Clear .DS_Store files" "find \"\$HOME\" -name '.DS_Store' -type f -delete"
+  _step "Remove download quarantine flags" "xattr -d -r com.apple.quarantine \"\$HOME/Downloads\""
+  _step "Rebuild Launch Services database" \
+    "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user"
+  _step "Clean Spotlight metadata" "mdimport -L"
+  _step "Clear clipboard" "pbcopy < /dev/null"
 
-  for entry in "${steps[@]}"; do
-    local name="${entry%%|*}" cmd="${entry##*|}"
-    printf "  ${CYAN}→${RESET}  %-50s" "$name..."
-    if [[ "$DRY_RUN" == true ]]; then
-      printf "  ${DIM}dry-run${RESET}\n"
-    elif eval "$cmd" &>/dev/null; then
-      printf "  ${GREEN}✓${RESET}\n"
-    else
-      printf "  ${YELLOW}skipped${RESET}\n"
-    fi
-  done
-
-  # Sudo steps — only if sudo is available without a password prompt
+  # Sudo-gated steps — never prompt, just skip
   echo ""
-  if can_sudo; then
-    printf "  ${DIM}Sudo available — running privileged optimizations...${RESET}\n\n"
-    local -a sudo_steps=(
-      "Flush DNS cache|sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder"
-      "Flush font cache|sudo atsutil databases -removeUser"
-      "Run daily maintenance|sudo periodic daily"
-      "Run weekly maintenance|sudo periodic weekly"
-      "Purge inactive memory|sudo purge"
-    )
-    for entry in "${sudo_steps[@]}"; do
-      local name="${entry%%|*}" cmd="${entry##*|}"
-      printf "  ${CYAN}→${RESET}  %-50s" "$name..."
-      if [[ "$DRY_RUN" == true ]]; then
-        printf "  ${DIM}dry-run${RESET}\n"
-      elif eval "$cmd" &>/dev/null; then
-        printf "  ${GREEN}✓${RESET}\n"
-      else
-        printf "  ${YELLOW}skipped${RESET}\n"
-      fi
-    done
+  if sudo -n true 2>/dev/null; then
+    printf "  ${DIM}Privileged optimizations (sudo available):${R}\n\n"
+    _step "Flush DNS cache" \
+      "sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder"
+    _step "Run daily maintenance scripts" "sudo periodic daily"
+    _step "Run weekly maintenance scripts" "sudo periodic weekly"
+    _step "Purge inactive memory" "sudo purge"
+    _step "Flush font caches" "sudo atsutil databases -removeUser"
   else
-    printf "  ${DIM}Tip: run ${RESET}${BWHITE}sudo pristine optimize${RESET}${DIM} for full optimization (DNS flush, memory purge)${RESET}\n"
+    printf "  ${DIM}Tip: run ${R}${BWHT}sudo pristine optimize${R}${DIM} to also flush DNS, purge RAM, and run maintenance.${R}\n"
   fi
 
   echo ""
-  printf "  ${DIM}%s${RESET}\n" "$(hr '═' 58)"
-  printf "  ${BGREEN}✓ System optimization complete${RESET}\n"
-  printf "  ${DIM}%s${RESET}\n\n" "$(hr '═' 58)"
+  printf "  ${DIM}%s${R}\n" "$(hr 56 '═')"
+  printf "  ${BGRN}✓ Optimization complete${R}\n"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '═')"
 }
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  STATUS DASHBOARD                                            ║
-# ╚══════════════════════════════════════════════════════════════╝
-
-_cpu_pct() {
-  # Sample CPU twice for an accurate reading
-  top -l 2 -n 0 -s 1 2>/dev/null | awk '/CPU usage/{
-    gsub(/%/,""); n++
-    if(n==2){ match($0, /([0-9.]+)% user/, u); match($0, /([0-9.]+)% sys/, s); printf "%.0f", u[1]+s[1] }
-  }' 2>/dev/null || echo "0"
-}
-
-_mem_info() {
-  local page_size total active wired compr used pct
-  page_size=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
-  total=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
-  active=$(vm_stat 2>/dev/null | awk '/Pages active/{gsub(/\./,""); print $3+0}')
-  wired=$(vm_stat 2>/dev/null  | awk '/Pages wired/{gsub(/\./,""); print $4+0}')
-  compr=$(vm_stat 2>/dev/null  | awk '/compressor/{gsub(/\./,""); print $5+0}')
-  used=$(( (active + wired + compr) * page_size ))
-  pct=$(awk -v u="$used" -v t="$total" 'BEGIN{if(t>0) printf "%.0f", u*100/t; else print 0}')
-  printf "%s|%s|%s" "$(fmt_bytes "$used")" "$(fmt_bytes "$total")" "$pct"
-}
-
-_disk_info() {
-  df -k / 2>/dev/null | awk 'NR==2{
-    u=$3; t=$2; f=$4
-    pct=(t>0)? int(u*100/t) : 0
-    printf "%d|%d|%d\n", f, t, pct
-  }'
-}
-
-_batt_info() {
-  local raw pct status
-  raw=$(pmset -g batt 2>/dev/null)
-  pct=$(echo "$raw" | grep -o '[0-9]*%' | head -1 | tr -d '%')
-  status=$(echo "$raw" | grep -oE '(Charging|AC attached|discharging|charged|finishing charge)' | head -1)
-  printf "%s|%s" "${pct:-AC}" "${status:-Unknown}"
-}
-
-_top_procs() {
-  ps -axro 'comm,pcpu' 2>/dev/null | awk 'NR>1 && NR<=6{
-    gsub(/.*\//,"",$1)
-    printf "  %-22s %5.1f%%\n", $1, $2
-  }'
-}
-
-_health() {
-  awk -v c="$1" -v m="$2" -v d="$3" 'BEGIN{
-    s=100
-    if(c>80)s-=25; else if(c>60)s-=15; else if(c>40)s-=5
-    if(m>90)s-=20; else if(m>75)s-=10; else if(m>60)s-=3
-    if(d>90)s-=20; else if(d>80)s-=10; else if(d>70)s-=3
-    print int(s)
-  }'
-}
-
-cmd_status() {
-  require_macos
-
-  local model host os_ver mem_gb
-  model=$(sysctl -n machdep.cpu.brand_string 2>/dev/null | cut -c1-30 || echo "Mac")
-  host=$(hostname -s 2>/dev/null || echo "Mac")
-  os_ver=$(sw_vers -productVersion 2>/dev/null || echo "macOS")
-  mem_gb=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0fGB",$1/1073741824}')
-
-  tput civis 2>/dev/null
-  trap 'tput cnorm 2>/dev/null; tput rmcup 2>/dev/null; printf "\n"; exit 0' INT TERM EXIT
-  tput smcup 2>/dev/null
-  clear
-
-  while true; do
-    tput cup 0 0 2>/dev/null
-
-    local cpu mem_info mem_used mem_tot mem_pct
-    local disk_info disk_free disk_tot disk_pct
-    local batt_pct batt_status health hc
-    local load_str uptime_str
-
-    cpu=$(_cpu_pct)
-    mem_info=$(_mem_info)
-    mem_used="${mem_info%%|*}"; mem_info="${mem_info#*|}"
-    mem_tot="${mem_info%%|*}";  mem_pct="${mem_info##*|}"
-
-    disk_info=$(_disk_info)
-    disk_free="${disk_info%%|*}"; disk_info="${disk_info#*|}"
-    disk_tot="${disk_info%%|*}";  disk_pct="${disk_info##*|}"
-
-    batt_pct=$(_batt_info | cut -d'|' -f1)
-    batt_status=$(_batt_info | cut -d'|' -f2)
-
-    health=$(_health "$cpu" "${mem_pct:-0}" "${disk_pct:-0}")
-    hc="$BGREEN"; [[ "$health" -lt 80 ]] && hc="$BYELLOW"; [[ "$health" -lt 60 ]] && hc="$BRED"
-
-    load_str=$(uptime 2>/dev/null | awk -F'load averages:' '{print $2}' | xargs)
-    uptime_str=$(uptime 2>/dev/null | awk -F'up ' '{print $2}' | awk -F', [0-9]+ user' '{print $1}' | xargs)
-
-    printf "\n"
-    printf "  ${BCYAN}${BOLD}PRISTINE STATUS${RESET}  ${DIM}Health ${hc}●${RESET}${hc}%d${RESET}  ${DIM}%s · %s · %s · macOS %s${RESET}\n" \
-      "$health" "$host" "$model" "$mem_gb" "$os_ver"
-    printf "\n"
-
-    printf "  ${BWHITE}⚙  CPU${RESET}\n"
-    printf "  Total   $(pct_bar "${cpu:-0}" 28)  ${BWHITE}%3s%%${RESET}\n" "${cpu:-0}"
-    printf "  Load    ${DIM}%s${RESET}\n\n" "$load_str"
-
-    printf "  ${BWHITE}▦  Memory${RESET}\n"
-    printf "  Used    $(pct_bar "${mem_pct:-0}" 28)  ${BWHITE}%3s%%${RESET}\n" "${mem_pct:-0}"
-    printf "  Usage   ${DIM}%s / %s${RESET}\n\n" "$mem_used" "$mem_tot"
-
-    printf "  ${BWHITE}▤  Disk  ${DIM}(/)${RESET}\n"
-    printf "  Used    $(pct_bar "${disk_pct:-0}" 28)  ${BWHITE}%3s%%${RESET}\n" "${disk_pct:-0}"
-    printf "  Free    ${DIM}%s free of %s total${RESET}\n\n" "$(fmt_kb "$disk_free")" "$(fmt_kb "$disk_tot")"
-
-    printf "  ${BWHITE}⚡ Battery${RESET}\n"
-    if [[ "$batt_pct" == "AC" ]]; then
-      printf "  Power   ${DIM}AC Power (desktop/no battery)${RESET}\n\n"
-    else
-      printf "  Level   $(pct_bar "${batt_pct:-0}" 28)  ${BWHITE}%3s%%${RESET}\n" "${batt_pct:-0}"
-      printf "  Status  ${DIM}%s${RESET}\n\n" "$batt_status"
-    fi
-
-    printf "  ${BWHITE}▶  Top Processes${RESET}\n"
-    _top_procs
-
-    printf "\n  ${DIM}%s${RESET}\n" "$(hr '─' 58)"
-    printf "  ${DIM}Auto-refreshes every 2s · Press ${RESET}${BWHITE}q${RESET}${DIM} to quit${RESET}\n"
-
-    if read -r -s -n1 -t 2 k </dev/tty 2>/dev/null; then
-      [[ "$k" == "q" || "$k" == "Q" ]] && break
-    fi
-    clear
-  done
-
-  tput cnorm 2>/dev/null
-  tput rmcup 2>/dev/null
-}
-
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  ANALYZE                                                     ║
-# ╚══════════════════════════════════════════════════════════════╝
-
+# ══════════════════════════════════════════════════════════════════
+#  ANALYZE
+# ══════════════════════════════════════════════════════════════════
 cmd_analyze() {
-  require_macos
   local target="${1:-$HOME}"
-  [[ -d "$target" ]] || { p_err "Path not found: $target"; exit 1; }
+  [[ -d "$target" ]] || { err "Path not found: $target"; exit 1; }
 
   banner
-  section "Disk Analyzer  ${DIM}$(echo "$target" | sed "s|$HOME|~|")"
-  p_info "Scanning... (this may take a moment)"
-  echo ""
+  local short="${target/$HOME/~}"
+  printf "  ${BWHT}Disk Analyzer${R}  ${DIM}%s${R}\n" "$short"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '─')"
+  spin_tick "Scanning $short..."
 
-  local tmpfile; tmpfile=$(mktemp /tmp/pristine_analyze.XXXXXX)
-  du -sk "${target}/"* 2>/dev/null | sort -rn | head -25 > "$tmpfile"
+  local tmp; tmp=$(mktemp /tmp/pristine_analyze.XXXXXX)
+  du -sk "${target}/"* 2>/dev/null | sort -rn | head -30 > "$tmp"
+  spin_done
 
-  local -a esizes=() epaths=()
-  local total_kb=0
-
+  local -a sizes=() paths=()
+  local total=0
   while IFS=$'\t' read -r kb path; do
-    [[ -z "$kb" || -z "$path" ]] && continue
-    esizes+=("$kb"); epaths+=("$path")
-    total_kb=$(( total_kb + kb ))
-  done < "$tmpfile"
-  rm -f "$tmpfile"
+    [[ -z "$kb" || -z "$path" || "$kb" -eq 0 ]] && continue
+    sizes+=("$kb"); paths+=("$path"); total=$(( total + kb ))
+  done < "$tmp"
+  rm -f "$tmp"
 
-  if [[ ${#esizes[@]} -eq 0 ]]; then
-    p_warn "Nothing found in $target"; return
-  fi
+  if [[ ${#paths[@]} -eq 0 ]]; then warn "Nothing found in $target"; return; fi
 
-  local max_kb="${esizes[0]}"
-  [[ "$max_kb" -lt 1 ]] && max_kb=1
+  local max="${sizes[0]}"; [[ "$max" -lt 1 ]] && max=1
+  local disk_total; disk_total=$(df -k / 2>/dev/null | awk 'NR==2{print $2+0}')
 
-  printf "  ${DIM}%-3s  %-36s  %9s  %-20s  %s${RESET}\n" "#" "Name" "Size" "Usage" "%"
-  printf "  ${DIM}%s${RESET}\n" "$(hr '─' 72)"
+  printf "  ${DIM}%-3s  %-38s  %10s  %s${R}\n" " # " "Name" "Size" "Relative"
+  printf "  ${DIM}%s${R}\n" "$(hr 72 '─')"
 
-  for i in "${!epaths[@]}"; do
-    local path="${epaths[$i]}" kb="${esizes[$i]}"
-    local name; name=$(basename "$path")
-    local pct;  pct=$(awk -v k="$kb" -v t="$total_kb" 'BEGIN{if(t>0)printf "%.0f",k*100/t; else print 0}')
-    local blen; blen=$(awk -v k="$kb" -v m="$max_kb" 'BEGIN{x=int(k*18/m); if(x<1)x=1; print x}')
-    local bar=""; for (( b=0; b<blen; b++ )); do bar+="█"; done
-    local icon="📄"; [[ -d "$path" ]] && icon="📁"
-
-    printf "  ${DIM}%2d.${RESET}  ${CYAN}%-35s${RESET}  ${BWHITE}%9s${RESET}  ${GREEN}%-18s${RESET}  ${DIM}%2d%%${RESET}\n" \
-      "$((i+1))" "${name:0:35}" "$(fmt_kb "$kb")" "$bar" "$pct"
+  for i in "${!paths[@]}"; do
+    local p="${paths[$i]}" kb="${sizes[$i]}"
+    local name; name=$(basename "$p")
+    local rel; rel=$(awk -v k="$kb" -v m="$max" 'BEGIN{printf "%.0f",k*100/m}')
+    local pct_disk; pct_disk=$(awk -v k="$kb" -v t="$disk_total" 'BEGIN{if(t>0)printf "%.1f",k*100/t; else printf "?"}')
+    local icon="📄"; [[ -d "$p" ]] && icon="📁"
+    printf "  ${DIM}%2d.${R}  ${CYN}%-38s${R}  ${BWHT}%10s${R}  $(bar "$rel" 18 "$GRN")  ${DIM}%s%% disk${R}\n" \
+      "$((i+1))" "${name:0:38}" "$(fmt_kb "$kb")" "$pct_disk"
   done
 
-  printf "  ${DIM}%s${RESET}\n" "$(hr '═' 72)"
-  printf "  ${BWHITE}Total: ${BGREEN}%s${RESET}  ${DIM}(top %d entries)${RESET}\n\n" \
-    "$(fmt_kb "$total_kb")" "${#esizes[@]}"
-  p_info "Run: pristine analyze ~/Downloads  to drill into a specific folder"
+  printf "  ${DIM}%s${R}\n" "$(hr 72 '═')"
+  printf "  ${BWHT}Total shown:${R}  ${BGRN}%-12s${R}  ${DIM}in %d entries${R}\n\n" \
+    "$(fmt_kb "$total")" "${#paths[@]}"
+  info "Drill deeper: pristine analyze ~/Downloads"
   echo ""
 }
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  UNINSTALL                                                   ║
-# ╚══════════════════════════════════════════════════════════════╝
-
-_app_artifacts() {
-  local name="$1"
-  local locs=(
+# ══════════════════════════════════════════════════════════════════
+#  UNINSTALL
+# ══════════════════════════════════════════════════════════════════
+_find_artifacts() {
+  local app_name="$1"
+  local bundle_id="${2:-}"
+  local -a locs=(
     "$HOME/Library/Application Support"
     "$HOME/Library/Caches"
     "$HOME/Library/Preferences"
@@ -486,162 +481,184 @@ _app_artifacts() {
     "$HOME/Library/Group Containers"
     "$HOME/Library/WebKit"
     "$HOME/Library/LaunchAgents"
+    "$HOME/Library/HTTPStorages"
     "/Library/Application Support"
-    "/Library/Preferences"
     "/Library/LaunchAgents"
     "/Library/LaunchDaemons"
     "/Library/PrivilegedHelperTools"
   )
-  local name_lower="${name,,}"
   for loc in "${locs[@]}"; do
     [[ -d "$loc" ]] || continue
-    find "$loc" -maxdepth 2 \( -iname "*${name}*" \) 2>/dev/null
-  done
+    # Match by app name (case-insensitive)
+    find "$loc" -maxdepth 2 -iname "*${app_name}*" 2>/dev/null
+    # Match by bundle ID if provided
+    [[ -n "$bundle_id" ]] && \
+      find "$loc" -maxdepth 2 -iname "*${bundle_id}*" 2>/dev/null
+  done | sort -u
 }
 
 cmd_uninstall() {
-  require_macos
   banner
-  section "Smart App Uninstaller"
-  p_info "Scanning installed applications..."
-  echo ""
+  printf "  ${BWHT}Smart App Uninstaller${R}\n"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '─')"
 
-  local -a app_paths=() app_names=() app_sizes=()
+  spin_tick "Scanning applications..."
+  local -a apaths=() anames=() asizes=() abids=()
 
   while IFS= read -r app; do
     [[ -z "$app" ]] && continue
-    app_paths+=("$app")
-    app_names+=("$(basename "$app" .app)")
-    app_sizes+=("$(dir_size_kb "$app")")
-  done < <(find /Applications "$HOME/Applications" -maxdepth 1 -name "*.app" 2>/dev/null | sort)
+    local aname; aname=$(basename "$app" .app)
+    local akb; akb=$(dir_size_kb "$app")
+    # Try to read bundle ID from Info.plist
+    local bid=""
+    bid=$(defaults read "${app}/Contents/Info" CFBundleIdentifier 2>/dev/null || true)
+    apaths+=("$app"); anames+=("$aname"); asizes+=("$akb"); abids+=("$bid")
+  done < <(find /Applications "$HOME/Applications" -maxdepth 2 -name "*.app" 2>/dev/null | sort)
 
-  if [[ ${#app_paths[@]} -eq 0 ]]; then
-    p_warn "No applications found."; return
-  fi
+  spin_done
 
-  printf "  ${DIM}%-3s  %-38s  %9s${RESET}\n" "#" "Application" "Size"
-  printf "  ${DIM}%s${RESET}\n" "$(hr '─' 54)"
-  for i in "${!app_paths[@]}"; do
-    printf "  ${DIM}%2d.${RESET}  ${CYAN}%-38s${RESET}  ${BWHITE}%9s${RESET}\n" \
-      "$((i+1))" "${app_names[$i]:0:38}" "$(fmt_kb "${app_sizes[$i]}")"
+  if [[ ${#apaths[@]} -eq 0 ]]; then warn "No applications found."; return; fi
+
+  printf "  ${DIM}%3s  %-36s  %10s  %s${R}\n" " # " "Application" "Bundle" "Size"
+  printf "  ${DIM}%s${R}\n" "$(hr 62 '─')"
+  for i in "${!apaths[@]}"; do
+    local bid_short="${abids[$i]:-unknown}"
+    bid_short="${bid_short:0:28}"
+    printf "  ${DIM}%2d.${R}  ${CYN}%-36s${R}  ${DIM}%-28s${R}  ${BWHT}%8s${R}\n" \
+      "$((i+1))" "${anames[$i]:0:36}" "$bid_short" "$(fmt_kb "${asizes[$i]}")"
   done
 
   echo ""
-  printf "  ${BYELLOW}→${RESET}  Enter app number(s) to uninstall ${DIM}(e.g. 1 3 5, or q)${RESET}: "
-  local sel; read -r sel </dev/tty
-  [[ "$sel" == "q" || "$sel" == "Q" || -z "$sel" ]] && { p_info "Aborted."; return; }
+  printf "  ${BYLW}?${R}  App number(s) to uninstall ${DIM}(e.g. 1 3 5 · q to quit)${R}: "
+  local sel; IFS= read -r sel </dev/tty || sel=""
+  [[ -z "$sel" || "$sel" == "q" ]] && { info "Aborted."; return; }
 
   for num in $sel; do
     [[ "$num" =~ ^[0-9]+$ ]] || continue
     local idx=$(( num - 1 ))
-    [[ $idx -lt 0 || $idx -ge ${#app_paths[@]} ]] && { p_warn "Invalid: $num"; continue; }
+    [[ $idx -lt 0 || $idx -ge ${#apaths[@]} ]] && { warn "Invalid: $num"; continue; }
 
-    local app="${app_paths[$idx]}" name="${app_names[$idx]}"
+    local app="${apaths[$idx]}" name="${anames[$idx]}" bid="${abids[$idx]:-}"
+    local app_kb="${asizes[$idx]}"
+
     echo ""
-    printf "  ${BWHITE}Uninstalling: ${BCYAN}%s${RESET}\n" "$name"
-    printf "  ${DIM}%s${RESET}\n" "$(hr '─' 54)"
-
+    printf "  ${BWHT}Analyzing: ${BCYN}%s${R}\n" "$name"
+    spin_tick "Finding all associated files..."
     local -a arts=()
-    while IFS= read -r item; do [[ -n "$item" ]] && arts+=("$item"); done \
-      < <(_app_artifacts "$name")
+    local arts_kb=0
+    while IFS= read -r f; do
+      [[ -n "$f" && "$f" != "$app" ]] && arts+=("$f")
+    done < <(_find_artifacts "$name" "$bid")
 
-    printf "  Found ${BWHITE}%d${RESET} associated files\n" "${#arts[@]}"
-    for a in "${arts[@]}"; do printf "    ${DIM}• %s${RESET}\n" "${a/$HOME/~}"; done
-    echo ""
+    for a in "${arts[@]}"; do
+      local akb; akb=$(dir_size_kb "$a")
+      arts_kb=$(( arts_kb + akb ))
+    done
+    spin_done
 
-    [[ "$DRY_RUN" == true ]] && { p_warn "Dry run — nothing deleted"; continue; }
-    confirm "Permanently remove $name and all associated files?" || { p_info "Skipping."; continue; }
+    local total_kb=$(( app_kb + arts_kb ))
+    printf "  ${DIM}%s${R}\n" "$(hr 56 '─')"
+    printf "  App bundle:        ${BWHT}%s${R}\n" "$(fmt_kb "$app_kb")"
+    printf "  Associated files:  ${BWHT}%s${R}  ${DIM}(%d items)${R}\n" "$(fmt_kb "$arts_kb")" "${#arts[@]}"
+    printf "  ${BGRN}Total to remove:   %s${R}\n" "$(fmt_kb "$total_kb")"
+    printf "  ${DIM}%s${R}\n\n" "$(hr 56 '─')"
 
-    local freed=0
-    printf "  ${CYAN}→${RESET}  Removing app bundle..."
-    rm -rf "$app" 2>/dev/null && { printf " ${GREEN}✓${RESET}\n"; freed=$(( freed + app_sizes[idx] )); } \
-      || printf " ${YELLOW}failed${RESET}\n"
-
-    for art in "${arts[@]}"; do
-      local akb; akb=$(dir_size_kb "$art")
-      printf "  ${CYAN}→${RESET}  ${DIM}%s${RESET}..." "${art/$HOME/~}"
-      rm -rf "$art" 2>/dev/null && { printf " ${GREEN}✓${RESET}\n"; freed=$(( freed + akb )); } \
-        || printf " ${YELLOW}failed${RESET}\n"
+    for a in "${arts[@]}"; do
+      printf "    ${DIM}→ %s${R}\n" "${a/$HOME/~}"
     done
 
-    printf "\n  ${DIM}%s${RESET}\n  ${BGREEN}✓ Freed %s from %s${RESET}\n" "$(hr '─' 54)" "$(fmt_kb "$freed")" "$name"
+    echo ""
+    [[ "$DRY_RUN" == true ]] && { warn "Dry run — nothing deleted."; continue; }
+    confirm "Permanently remove ${name} and all ${#arts[@]} associated files ($(fmt_kb "$total_kb"))?" || {
+      info "Skipping $name."
+      continue
+    }
+
+    local freed=0
+    printf "\n  ${CYN}→${R}  Removing app bundle..."
+    rm -rf "$app" 2>/dev/null && { printf " ${GRN}✓${R}\n"; freed=$(( freed + app_kb )); } \
+      || printf " ${YLW}failed${R}\n"
+
+    for a in "${arts[@]}"; do
+      local akb; akb=$(dir_size_kb "$a")
+      printf "  ${CYN}→${R}  ${DIM}%s${R}..." "${a/$HOME/~}"
+      rm -rf "$a" 2>/dev/null && { printf " ${GRN}✓${R}\n"; freed=$(( freed + akb )); } \
+        || printf " ${YLW}failed${R}\n"
+    done
+
+    printf "\n  ${BGRN}✓ Removed %s and freed %s${R}\n" "$name" "$(fmt_kb "$freed")"
   done
   echo ""
 }
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  PURGE                                                       ║
-# ╚══════════════════════════════════════════════════════════════╝
-
+# ══════════════════════════════════════════════════════════════════
+#  PURGE — Build Artifacts
+# ══════════════════════════════════════════════════════════════════
 cmd_purge() {
-  require_macos
   banner
-  section "Project Artifact Purge"
-  [[ "$DRY_RUN" == true ]] && p_warn "Dry run — no files will be deleted"
-  p_info "Scanning for build artifacts..."
-  echo ""
+  printf "  ${BWHT}Project Artifact Purge${R}\n"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '─')"
+  [[ "$DRY_RUN" == true ]] && warn "DRY RUN — nothing will be deleted"
 
   local -a scan_dirs=(
-    "$HOME/Desktop" "$HOME/Documents" "$HOME/Projects" "$HOME/dev"
-    "$HOME/Developer" "$HOME/Code" "$HOME/Work" "$HOME/Sites"
-    "$HOME/github" "$HOME/repos" "$HOME/src"
+    "$HOME/Desktop" "$HOME/Documents" "$HOME/Projects"
+    "$HOME/dev" "$HOME/Developer" "$HOME/Code"
+    "$HOME/Work" "$HOME/Sites" "$HOME/github"
+    "$HOME/repos" "$HOME/src" "$HOME/workspace"
   )
-
   local cfg="$HOME/.config/pristine/purge_paths"
-  if [[ -f "$cfg" ]]; then
-    while IFS= read -r line; do
-      [[ -n "$line" && ! "$line" =~ ^# ]] && scan_dirs+=("$line")
-    done < "$cfg"
-  fi
+  [[ -f "$cfg" ]] && while IFS= read -r l; do
+    [[ -n "$l" && ! "$l" =~ ^# ]] && scan_dirs+=("$l")
+  done < "$cfg"
 
   local -a patterns=(
     "node_modules" "target" ".build" "build" "dist"
-    "__pycache__" ".pytest_cache" "venv" ".venv"
+    "__pycache__" ".pytest_cache" "venv" ".venv" "env"
     ".gradle" "Pods" ".next" ".nuxt" ".output"
-    ".svelte-kit" "out" ".dart_tool"
+    ".svelte-kit" "out" ".dart_tool" ".cache"
+    ".parcel-cache" ".turbo" ".vercel" ".netlify"
   )
 
-  local tmpfile; tmpfile=$(mktemp /tmp/pristine_purge.XXXXXX)
+  spin_tick "Scanning projects..."
+  local tmp; tmp=$(mktemp /tmp/pristine_purge.XXXXXX)
 
   for dir in "${scan_dirs[@]}"; do
     [[ -d "$dir" ]] || continue
     for pattern in "${patterns[@]}"; do
-      find "$dir" -maxdepth 7 -type d -name "$pattern" -prune 2>/dev/null | while read -r found; do
-        local kb; kb=$(dir_size_kb "$found")
-        [[ "$kb" -gt 0 ]] && printf "%s\t%s\n" "$kb" "$found"
-      done
+      find "$dir" -maxdepth 8 -type d -name "$pattern" -prune 2>/dev/null \
+        | while read -r found; do
+            local kb; kb=$(dir_size_kb "$found")
+            [[ "$kb" -gt 0 ]] && printf "%s\t%s\n" "$kb" "$found"
+          done
     done
-  done | sort -rn > "$tmpfile"
+  done | sort -rn > "$tmp"
+  spin_done
 
   local -a fpaths=() fsizes=()
-  local total_kb=0
-
+  local grand=0
   while IFS=$'\t' read -r kb path; do
     [[ -z "$kb" || -z "$path" ]] && continue
-    fpaths+=("$path"); fsizes+=("$kb")
-    total_kb=$(( total_kb + kb ))
-  done < "$tmpfile"
-  rm -f "$tmpfile"
+    fpaths+=("$path"); fsizes+=("$kb"); grand=$(( grand + kb ))
+  done < "$tmp"
+  rm -f "$tmp"
 
-  if [[ ${#fpaths[@]} -eq 0 ]]; then
-    p_ok "No build artifacts found — projects are already clean!"; return
-  fi
+  if [[ ${#fpaths[@]} -eq 0 ]]; then ok "No build artifacts found — clean!"; return; fi
 
-  printf "  ${DIM}Found %d artifact directories · %s total${RESET}\n\n" \
-    "${#fpaths[@]}" "$(fmt_kb "$total_kb")"
+  printf "  ${DIM}Found ${R}${BWHT}%d${R}${DIM} artifact directories · ${R}${BGRN}%s${R}${DIM} total${R}\n\n" \
+    "${#fpaths[@]}" "$(fmt_kb "$grand")"
 
-  printf "  ${DIM}%-3s  %-52s  %9s${RESET}\n" "#" "Path" "Size"
-  printf "  ${DIM}%s${RESET}\n" "$(hr '─' 68)"
+  printf "  ${DIM}%3s  %-52s  %10s${R}\n" " # " "Path" "Size"
+  printf "  ${DIM}%s${R}\n" "$(hr 68 '─')"
   for i in "${!fpaths[@]}"; do
     local short="${fpaths[$i]/$HOME/~}"
-    printf "  ${DIM}%2d.${RESET}  ${CYAN}%-52s${RESET}  ${BWHITE}%9s${RESET}\n" \
+    printf "  ${DIM}%2d.${R}  ${CYN}%-52s${R}  ${BWHT}%10s${R}\n" \
       "$((i+1))" "${short:0:52}" "$(fmt_kb "${fsizes[$i]}")"
   done
 
   echo ""
-  printf "  ${BYELLOW}→${RESET}  Enter numbers ${DIM}(e.g. 1-5, 'all', or q to quit)${RESET}: "
-  local sel; read -r sel </dev/tty
-  [[ "$sel" == "q" || "$sel" == "Q" || -z "$sel" ]] && { p_info "Aborted."; return; }
+  printf "  ${BYLW}?${R}  Select ${DIM}(numbers, ranges like 1-5, 'all', or q)${R}: "
+  local sel; IFS= read -r sel </dev/tty || sel=""
+  [[ -z "$sel" || "$sel" == "q" ]] && { info "Aborted."; return; }
 
   local -a idxs=()
   if [[ "$sel" == "all" ]]; then
@@ -650,15 +667,14 @@ cmd_purge() {
     for tok in $sel; do
       if [[ "$tok" =~ ^([0-9]+)-([0-9]+)$ ]]; then
         for (( n=${BASH_REMATCH[1]}; n<=${BASH_REMATCH[2]}; n++ )); do
-          idxs+=("$(( n - 1 ))")
+          idxs+=("$(( n-1 ))")
         done
       elif [[ "$tok" =~ ^[0-9]+$ ]]; then
-        idxs+=("$(( tok - 1 ))")
+        idxs+=("$(( tok-1 ))")
       fi
     done
   fi
-
-  [[ ${#idxs[@]} -eq 0 ]] && { p_warn "No valid selection."; return; }
+  [[ ${#idxs[@]} -eq 0 ]] && { warn "No valid selection."; return; }
 
   local sel_kb=0
   for idx in "${idxs[@]}"; do
@@ -666,196 +682,267 @@ cmd_purge() {
   done
 
   echo ""
-  confirm "Permanently delete ${#idxs[@]} directories ($(fmt_kb "$sel_kb"))?" || {
-    p_info "Aborted."; return
-  }
+  confirm "Delete ${#idxs[@]} directories and free $(fmt_kb "$sel_kb")?" || { info "Aborted."; return; }
 
-  section "Purging"
-  echo ""
-
-  local freed_kb=0
+  printf "\n  ${BWHT}Purging...${R}\n\n"
+  local freed=0
   for idx in "${idxs[@]}"; do
     [[ $idx -lt 0 || $idx -ge ${#fpaths[@]} ]] && continue
     local path="${fpaths[$idx]}" kb="${fsizes[$idx]}"
     local short="${path/$HOME/~}"
-    printf "  ${CYAN}→${RESET}  %-56s" "${short:0:56}..."
-    if [[ "$DRY_RUN" == true ]]; then
-      printf "  ${DIM}dry-run${RESET}\n"
+    printf "  ${CYN}→${R}  %-56s" "${short:0:56}..."
+    if [[ "$DRY_RUN" == true ]]; then printf "${DIM}dry-run${R}\n"
     elif rm -rf "${path:?}" 2>/dev/null; then
-      printf "  ${GREEN}✓ %s${RESET}\n" "$(fmt_kb "$kb")"
-      freed_kb=$(( freed_kb + kb ))
-    else
-      printf "  ${YELLOW}failed${RESET}\n"
-    fi
+      printf "${GRN}✓  %s${R}\n" "$(fmt_kb "$kb")"; freed=$(( freed + kb ))
+    else printf "${YLW}failed${R}\n"; fi
   done
 
   echo ""
-  printf "  ${DIM}%s${RESET}\n" "$(hr '═' 58)"
-  printf "  ${BGREEN}✓ Space freed: %s${RESET}\n" "$(fmt_kb "$freed_kb")"
-  printf "  ${DIM}%s${RESET}\n\n" "$(hr '═' 58)"
+  printf "  ${DIM}%s${R}\n" "$(hr 56 '═')"
+  printf "  ${BGRN}✓ Freed: %s${R}\n" "$(fmt_kb "$freed")"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '═')"
 }
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  DOCTOR                                                      ║
-# ╚══════════════════════════════════════════════════════════════╝
+# ══════════════════════════════════════════════════════════════════
+#  STATUS Dashboard
+# ══════════════════════════════════════════════════════════════════
+cmd_status() {
+  local model host os_ver mem_total_gb
+  model=$(sysctl -n machdep.cpu.brand_string 2>/dev/null | cut -c1-26 || echo "Mac")
+  host=$(hostname -s 2>/dev/null || echo "Mac")
+  os_ver=$(sw_vers -productVersion 2>/dev/null || echo "macOS")
+  mem_total_gb=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f",$1/1073741824}')
 
+  tput civis 2>/dev/null
+  trap 'tput cnorm 2>/dev/null; tput rmcup 2>/dev/null; printf "\n"; exit 0' INT TERM EXIT
+  tput smcup 2>/dev/null; clear
+
+  while true; do
+    tput cup 0 0 2>/dev/null
+
+    # CPU
+    local cpu
+    cpu=$(top -l 2 -n 0 -s 1 2>/dev/null | awk '/CPU usage/{
+      n++; if(n==2){
+        match($0,/([0-9.]+)%[[:space:]]*user/,u)
+        match($0,/([0-9.]+)%[[:space:]]*sys/,s)
+        printf "%.0f", u[1]+s[1]
+      }
+    }' 2>/dev/null || echo "0")
+
+    # Memory
+    local pg total_mem active wired compr used_mem mem_pct
+    pg=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
+    total_mem=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
+    active=$(vm_stat 2>/dev/null | awk '/Pages active/{gsub(/\./,"");print $3+0}')
+    wired=$(vm_stat   2>/dev/null | awk '/Pages wired/{gsub(/\./,"");print $4+0}')
+    compr=$(vm_stat   2>/dev/null | awk '/compressor/{gsub(/\./,"");print $5+0}')
+    used_mem=$(( (active + wired + compr) * pg ))
+    mem_pct=$(awk -v u="$used_mem" -v t="$total_mem" 'BEGIN{if(t>0)printf "%.0f",u*100/t; else print 0}')
+
+    # Disk
+    local dfree dtotal dpct
+    dfree=$(df -k / 2>/dev/null | awk 'NR==2{print $4+0}')
+    dtotal=$(df -k / 2>/dev/null | awk 'NR==2{print $2+0}')
+    dpct=$(awk -v u="$dfree" -v t="$dtotal" 'BEGIN{if(t>0)printf "%.0f",(t-u)*100/t; else print 0}')
+
+    # Battery
+    local braw bpct bstat
+    braw=$(pmset -g batt 2>/dev/null)
+    bpct=$(printf '%s' "$braw" | grep -o '[0-9]*%' | head -1 | tr -d '%')
+    bstat=$(printf '%s' "$braw" | grep -oE '(Charging|AC attached|discharging|charged|finishing charge)' | head -1)
+
+    # Load
+    local load; load=$(uptime 2>/dev/null | awk -F'load averages:' '{print $2}' | xargs)
+
+    # Health score
+    local health hc
+    health=$(awk -v c="${cpu:-0}" -v m="${mem_pct:-0}" -v d="${dpct:-0}" 'BEGIN{
+      s=100
+      if(c>80)s-=25; else if(c>60)s-=15; else if(c>40)s-=5
+      if(m>90)s-=20; else if(m>75)s-=10; else if(m>60)s-=3
+      if(d>90)s-=20; else if(d>80)s-=10; else if(d>70)s-=3
+      print int(s)
+    }')
+    hc="$BGRN"; [[ "$health" -lt 80 ]] && hc="$BYLW"; [[ "$health" -lt 60 ]] && hc="$BRED"
+
+    printf "\n"
+    printf "  ${BCYN}${BLD}PRISTINE STATUS${R}  "
+    printf "${DIM}Health ${hc}●${R}${hc}%s${R}  " "$health"
+    printf "${DIM}%s · %s · %sGB · macOS %s${R}\n\n" "$host" "$model" "$mem_total_gb" "$os_ver"
+
+    printf "  ${BWHT}⚙  CPU${R}\n"
+    printf "  Total    $(bar "${cpu:-0}" 26)  ${BWHT}%3s%%${R}\n" "${cpu:-0}"
+    printf "  Load avg ${DIM}%s${R}\n\n" "$load"
+
+    printf "  ${BWHT}▦  Memory${R}\n"
+    printf "  Used     $(bar "${mem_pct:-0}" 26)  ${BWHT}%3s%%${R}\n" "${mem_pct:-0}"
+    printf "  Usage    ${DIM}%s / %sGB${R}\n\n" \
+      "$(fmt_kb "$(( used_mem / 1024 ))")" "$mem_total_gb"
+
+    printf "  ${BWHT}▤  Disk  ${DIM}(/)${R}\n"
+    printf "  Used     $(bar "${dpct:-0}" 26)  ${BWHT}%3s%%${R}\n" "${dpct:-0}"
+    printf "  Free     ${DIM}%s of %s${R}\n\n" "$(fmt_kb "$dfree")" "$(fmt_kb "$dtotal")"
+
+    printf "  ${BWHT}⚡ Battery${R}\n"
+    if [[ -n "${bpct:-}" ]]; then
+      printf "  Level    $(bar "${bpct:-0}" 26)  ${BWHT}%3s%%${R}\n" "${bpct:-0}"
+      printf "  Status   ${DIM}%s${R}\n\n" "${bstat:-Unknown}"
+    else
+      printf "  ${DIM}AC power (desktop Mac or battery unavailable)${R}\n\n"
+    fi
+
+    printf "  ${BWHT}▶  Top Processes${R}\n"
+    ps -axro comm,pcpu 2>/dev/null | awk 'NR>1 && NR<=7{
+      gsub(/.*\//,"",$1); printf "  %-24s %5.1f%%\n", $1, $2
+    }'
+
+    printf "\n  ${DIM}%s${R}\n" "$(hr 56 '─')"
+    printf "  ${DIM}Refreshing every 2s  ·  Press ${R}${BWHT}q${R}${DIM} to quit${R}\n"
+
+    read -r -s -n1 -t 2 k </dev/tty 2>/dev/null || true
+    [[ "${k:-}" == "q" || "${k:-}" == "Q" ]] && break
+    clear
+  done
+  tput cnorm 2>/dev/null; tput rmcup 2>/dev/null
+}
+
+# ══════════════════════════════════════════════════════════════════
+#  DOCTOR
+# ══════════════════════════════════════════════════════════════════
 cmd_doctor() {
-  require_macos
   banner
-  section "System Health Report"
-  echo ""
+  printf "  ${BWHT}System Health Report${R}  ${DIM}(read-only · always safe)${R}\n"
+  printf "  ${DIM}%s${R}\n\n" "$(hr 56 '─')"
 
-  local ok=0 warn=0 crit=0
-
-  _check() {
-    local label="$1" status="$2" detail="$3"
-    case "$status" in
-      ok)   p_ok   "$(printf '%-40s %s' "$label" "$detail")"; (( ok++   )) ;;
-      warn) p_warn "$(printf '%-40s %s' "$label" "$detail")"; (( warn++ )) ;;
-      crit) p_err  "$(printf '%-40s %s' "$label" "$detail")"; (( crit++ )) ;;
+  local _ok=0 _warn=0 _crit=0
+  _chk() {
+    local lbl="$1" st="$2" detail="$3"
+    case "$st" in
+      ok)   ok   "$(printf '%-42s %s' "$lbl" "$detail")"; (( _ok++   )) ;;
+      warn) warn "$(printf '%-42s %s' "$lbl" "$detail")"; (( _warn++ )) ;;
+      crit) err  "$(printf '%-42s %s' "$lbl" "$detail")"; (( _crit++ )) ;;
     esac
   }
 
   # Disk
-  local dpct dfree
-  dpct=$(df -k / 2>/dev/null | awk 'NR==2{printf "%.0f", $3*100/$2}')
-  dfree=$(df -k / 2>/dev/null | awk 'NR==2{printf "%.1f", $4/1048576}')
-  if   (( dpct > 90 )); then _check "Disk space (${dfree}GB free)" crit "${dpct}% used — critically low"
-  elif (( dpct > 75 )); then _check "Disk space (${dfree}GB free)" warn "${dpct}% used — getting full"
-  else                        _check "Disk space (${dfree}GB free)" ok   "${dpct}% used"
-  fi
+  local dp df
+  dp=$(df -k / 2>/dev/null | awk 'NR==2{printf "%.0f",$3*100/$2}')
+  df=$(df -k / 2>/dev/null | awk 'NR==2{printf "%.1f",$4/1048576}')
+  (( dp > 90 )) && _chk "Disk space (${df}GB free)" crit "${dp}% used — critically low" \
+  || { (( dp > 75 )) && _chk "Disk space (${df}GB free)" warn "${dp}% used — getting full" \
+  || _chk "Disk space (${df}GB free)" ok "${dp}% used"; }
 
   # Memory
-  local mpct
-  mpct=$(vm_stat 2>/dev/null | awk '
+  local mp
+  mp=$(vm_stat 2>/dev/null | awk '
     /Pages active/{a=$3+0} /Pages wired/{w=$4+0} /compressor/{c=$5+0}
-    END{tot=a+w+c; if(tot>0) printf "%.0f", tot*100/(tot+100000); else print 0}')
-  if   (( ${mpct:-0} > 85 )); then _check "Memory pressure" crit "High — ${mpct}%"
-  elif (( ${mpct:-0} > 65 )); then _check "Memory pressure" warn "Elevated — ${mpct}%"
-  else                              _check "Memory pressure" ok   "Normal — ${mpct}%"
-  fi
+    END{t=a+w+c; if(t>0) printf "%.0f",t*100/(t+100000); else print 0}')
+  (( ${mp:-0} > 85 )) && _chk "Memory pressure" crit "High — ${mp}%" \
+  || { (( ${mp:-0} > 65 )) && _chk "Memory pressure" warn "Elevated — ${mp}%" \
+  || _chk "Memory pressure" ok "Normal — ${mp}%"; }
 
   # Trash
-  local trash_kb; trash_kb=$(dir_size_kb "$HOME/.Trash")
-  if   (( trash_kb > 5242880 )); then _check "Trash" warn "$(fmt_kb "$trash_kb") — consider emptying"
-  else                                 _check "Trash" ok   "$(fmt_kb "$trash_kb")"
-  fi
+  local tk; tk=$(dir_size_kb "$HOME/.Trash")
+  (( ${tk:-0} > 5242880 )) \
+    && _chk "Trash" warn "$(fmt_kb "$tk") — empty it" \
+    || _chk "Trash" ok "$(fmt_kb "${tk:-0}")"
 
-  # User caches
-  local cache_kb; cache_kb=$(dir_size_kb "$HOME/Library/Caches")
-  if   (( ${cache_kb:-0} > 20971520 )); then _check "User caches" warn "$(fmt_kb "$cache_kb") — run 'pristine clean'"
-  else                                        _check "User caches" ok   "$(fmt_kb "${cache_kb:-0}")"
-  fi
+  # Caches
+  local ck; ck=$(dir_size_kb "$HOME/Library/Caches")
+  (( ${ck:-0} > 20971520 )) \
+    && _chk "User caches" warn "$(fmt_kb "$ck") — run 'pristine clean'" \
+    || _chk "User caches" ok "$(fmt_kb "${ck:-0}")"
+
+  # npm
+  local nk; nk=$(dir_size_kb "$HOME/.npm/_cacache")
+  (( ${nk:-0} > 2097152 )) \
+    && _chk "npm cache" warn "$(fmt_kb "$nk") — run 'pristine clean'" \
+    || _chk "npm cache" ok "$(fmt_kb "${nk:-0}")"
 
   # Xcode DerivedData
-  local xdd="$HOME/Library/Developer/Xcode/DerivedData"
-  if [[ -d "$xdd" ]]; then
-    local xkb; xkb=$(dir_size_kb "$xdd")
-    if (( xkb > 5242880 )); then _check "Xcode DerivedData" warn "$(fmt_kb "$xkb") — run 'pristine clean'"
-    else                          _check "Xcode DerivedData" ok   "$(fmt_kb "$xkb")"
-    fi
-  fi
+  local xk; xk=$(dir_size_kb "$HOME/Library/Developer/Xcode/DerivedData")
+  (( ${xk:-0} > 5242880 )) \
+    && _chk "Xcode DerivedData" warn "$(fmt_kb "$xk") — run 'pristine clean'" \
+    || _chk "Xcode DerivedData" ok "$(fmt_kb "${xk:-0}")"
 
-  # npm cache
-  if [[ -d "$HOME/.npm/_cacache" ]]; then
-    local nkb; nkb=$(dir_size_kb "$HOME/.npm/_cacache")
-    if (( nkb > 2097152 )); then _check "npm cache" warn "$(fmt_kb "$nkb") — run 'pristine clean'"
-    else                          _check "npm cache" ok   "$(fmt_kb "$nkb")"
-    fi
-  fi
+  # Docker
+  local dk; dk=$(dir_size_kb "$HOME/Library/Containers/com.docker.docker/Data/vms")
+  (( ${dk:-0} > 10485760 )) \
+    && _chk "Docker data" warn "$(fmt_kb "$dk") — run 'pristine clean'" \
+    || _chk "Docker data" ok "$(fmt_kb "${dk:-0}")"
 
-  # SSD SMART
-  local smart; smart=$(diskutil info / 2>/dev/null | awk '/SMART Status/{print $3}')
-  if [[ "$smart" == "Verified" || "$smart" == "Not Supported" || -z "$smart" ]]; then
-    _check "SSD SMART status" ok "${smart:-Verified}"
-  else
-    _check "SSD SMART status" crit "$smart"
-  fi
+  # SMART
+  local sm; sm=$(diskutil info / 2>/dev/null | awk '/SMART Status/{print $3}')
+  [[ "$sm" == "Verified" || "$sm" == "Not Supported" || -z "$sm" ]] \
+    && _chk "SSD SMART status" ok "${sm:-Verified}" \
+    || _chk "SSD SMART status" crit "$sm"
 
-  # macOS version
-  _check "macOS version" ok "$(sw_vers -productVersion 2>/dev/null)"
+  # macOS
+  _chk "macOS version" ok "$(sw_vers -productVersion 2>/dev/null)"
 
   # Uptime
-  local udays; udays=$(uptime 2>/dev/null | awk '/day/{match($0, /([0-9]+) day/, d); print d[1]+0}')
-  if   (( ${udays:-0} > 30 )); then _check "System uptime" warn "${udays} days — restart recommended"
-  elif (( ${udays:-0} > 14 )); then _check "System uptime" warn "${udays} days"
-  else  _check "System uptime" ok "$(uptime 2>/dev/null | awk -F'up ' '{print $2}' | awk -F',' '{print $1}' | xargs)"
-  fi
+  local ud; ud=$(uptime 2>/dev/null | awk '/day/{match($0,/([0-9]+) day/,d); print d[1]+0}')
+  (( ${ud:-0} > 30 )) && _chk "Uptime" warn "${ud} days — restart recommended" \
+  || { (( ${ud:-0} > 14 )) && _chk "Uptime" warn "${ud} days" \
+  || _chk "Uptime" ok "$(uptime 2>/dev/null | awk -F'up ' '{print $2}' | awk -F', [0-9]+ user' '{print $1}' | xargs)"; }
+
+  # Rosetta
+  /usr/bin/pgrep oahd &>/dev/null && _chk "Rosetta 2" ok "Active (some apps need it)"
 
   echo ""
-  printf "  ${DIM}%s${RESET}\n" "$(hr '═' 58)"
-  printf "  ${BGREEN}Passed: %d${RESET}  ${BYELLOW}Warnings: %d${RESET}  ${BRED}Critical: %d${RESET}\n\n" "$ok" "$warn" "$crit"
-
-  if   (( crit > 0 )); then p_warn "Run 'pristine clean' and 'pristine optimize' to address issues."
-  elif (( warn > 0 )); then p_info "Run 'pristine clean' to reclaim space."
-  else                       p_ok  "Your Mac is in excellent shape!"
-  fi
+  printf "  ${DIM}%s${R}\n" "$(hr 56 '═')"
+  printf "  ${BGRN}Passed: %d${R}   ${BYLW}Warnings: %d${R}   ${BRED}Critical: %d${R}\n\n" "$_ok" "$_warn" "$_crit"
+  (( _crit > 0 )) && warn "Run 'pristine clean' and 'pristine optimize' urgently." \
+  || { (( _warn > 0 )) && info "Run 'pristine clean' to reclaim space." \
+  || ok "Your Mac is in excellent shape! ✨"; }
   echo ""
 }
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  INTERACTIVE MENU                                            ║
-# ╚══════════════════════════════════════════════════════════════╝
-
-_read_key() {
-  local k seq
-  IFS= read -r -s -n1 k </dev/tty 2>/dev/null
-  if [[ "$k" == $'\x1b' ]]; then
-    IFS= read -r -s -n2 seq </dev/tty 2>/dev/null
-    k+="$seq"
-  fi
-  printf '%s' "$k"
-}
-
+# ══════════════════════════════════════════════════════════════════
+#  INTERACTIVE MENU
+# ══════════════════════════════════════════════════════════════════
 cmd_menu() {
-  require_macos
-
   local -a labels=(
-    "clean     Deep clean caches, logs & browser data"
-    "optimize  Flush DNS, maintenance scripts & services"
-    "analyze   Visual disk space breakdown by folder"
-    "uninstall Remove apps and all their hidden files"
-    "purge     Delete build artifacts (node_modules, etc.)"
-    "status    Live real-time system health dashboard"
-    "doctor    Full system health check & recommendations"
+    "clean      Deep clean — caches, logs, browsers, dev tools"
+    "optimize   Flush DNS, maintenance, rebuild services"
+    "analyze    Visual disk breakdown — see what's eating space"
+    "uninstall  Remove apps + every hidden file they left behind"
+    "purge      Nuke build artifacts — node_modules, target, venv…"
+    "status     Live CPU · memory · disk · battery dashboard"
+    "doctor     Full health check with recommendations"
   )
   local -a cmds=(clean optimize analyze uninstall purge status doctor)
-  local selected=0 total=${#labels[@]}
+  local sel=0 total=${#labels[@]}
 
   tput civis 2>/dev/null
   trap 'tput cnorm 2>/dev/null; clear; printf "\n"; exit 0' INT TERM EXIT
 
   while true; do
-    clear
-    banner
-    printf "  ${DIM}↑↓ or j/k to navigate  ·  Enter to run  ·  q to quit${RESET}\n\n"
+    clear; banner
+    printf "  ${DIM}↑ ↓  or  j k  to navigate   ·   Enter to run   ·   q to quit${R}\n\n"
 
     for i in "${!labels[@]}"; do
-      local cmd_name="${labels[$i]%% *}"
-      local desc="${labels[$i]#* }"
-      if [[ $i -eq $selected ]]; then
-        printf "  ${BCYAN}${BOLD} ▶  %-12s${RESET}  %s\n" "$cmd_name" "$desc"
+      local cname="${labels[$i]%%  *}"   # up to first double-space
+      local desc="${labels[$i]#*  }"     # after first double-space
+      if [[ $i -eq $sel ]]; then
+        printf "  ${BCYN}${BLD} ▶  %-12s${R}  %s\n" "$cname" "$desc"
       else
-        printf "     ${CYAN}%-12s${RESET}  ${DIM}%s${RESET}\n" "$cmd_name" "$desc"
+        printf "     ${CYN}%-12s${R}  ${DIM}%s${R}\n" "$cname" "$desc"
       fi
     done
 
-    printf "\n  ${DIM}%s${RESET}\n" "$(hr '─' 58)"
-    printf "  ${DIM}Pristine v%s · macOS %s${RESET}\n" "$VERSION" "$(sw_vers -productVersion 2>/dev/null)"
+    printf "\n  ${DIM}%s${R}\n" "$(hr 56 '─')"
+    printf "  ${DIM}Pristine v%s · macOS %s · %s${R}\n" \
+      "$VERSION" "$(sw_vers -productVersion 2>/dev/null)" "$(hostname -s 2>/dev/null)"
 
-    local key; key=$(_read_key)
-    case "$key" in
-      $'\x1b[A'|k|K)
-        (( selected > 0 )) && (( selected-- )) || selected=$(( total - 1 ))
-        ;;
-      $'\x1b[B'|j|J)
-        (( selected < total - 1 )) && (( selected++ )) || selected=0
-        ;;
+    local k; k=$(read_key)
+    case "$k" in
+      $'\x1b[A'|k|K) (( sel > 0 )) && (( sel-- )) || sel=$(( total-1 )) ;;
+      $'\x1b[B'|j|J) (( sel < total-1 )) && (( sel++ )) || sel=0 ;;
       $'\n'|$'\r'|'')
-        local chosen="${cmds[$selected]}"
-        tput cnorm 2>/dev/null
-        clear
-        case "$chosen" in
+        tput cnorm 2>/dev/null; clear
+        case "${cmds[$sel]}" in
           clean)     cmd_clean ;;
           optimize)  cmd_optimize ;;
           analyze)   cmd_analyze ;;
@@ -865,82 +952,68 @@ cmd_menu() {
           doctor)    cmd_doctor ;;
         esac
         tput civis 2>/dev/null
-        printf "\n  ${DIM}Press any key to return to menu...${RESET}"
+        printf "  ${DIM}Press any key to return to menu...${R}"
         read -r -s -n1 </dev/tty
         ;;
       q|Q) break ;;
     esac
   done
 
-  tput cnorm 2>/dev/null
-  clear
-  banner
-  printf "  ${BGREEN}Thanks for using Pristine!${RESET}\n"
-  printf "  ${DIM}Star us on GitHub if it helped ⭐${RESET}\n\n"
+  tput cnorm 2>/dev/null; clear; banner
+  printf "  ${BGRN}Thanks for using Pristine!${R}\n"
+  printf "  ${DIM}Star us on GitHub if it helped → github.com/TheWarrior-tech/pristine ⭐${R}\n\n"
 }
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  HELP                                                        ║
-# ╚══════════════════════════════════════════════════════════════╝
-
+# ══════════════════════════════════════════════════════════════════
+#  HELP
+# ══════════════════════════════════════════════════════════════════
 cmd_help() {
   banner
-  printf "  ${BWHITE}USAGE${RESET}\n"
-  printf "    pristine [command] [options]\n\n"
-
-  printf "  ${BWHITE}COMMANDS${RESET}\n"
-  printf "    ${CYAN}pristine${RESET}                  Interactive menu (default)\n"
-  printf "    ${CYAN}pristine clean${RESET}            Deep clean caches, logs & browser data\n"
-  printf "    ${CYAN}pristine optimize${RESET}         Flush DNS, run maintenance, rebuild services\n"
-  printf "    ${CYAN}pristine analyze${RESET} [path]   Visual disk space breakdown (default: ~)\n"
-  printf "    ${CYAN}pristine uninstall${RESET}        Remove apps and all their hidden files\n"
-  printf "    ${CYAN}pristine purge${RESET}            Delete build artifacts (node_modules etc.)\n"
-  printf "    ${CYAN}pristine status${RESET}           Live system health dashboard\n"
-  printf "    ${CYAN}pristine doctor${RESET}           Full health check (read-only, always safe)\n\n"
-
-  printf "  ${BWHITE}OPTIONS${RESET}\n"
-  printf "    ${CYAN}--dry-run${RESET}                 Preview changes without deleting anything\n"
-  printf "    ${CYAN}--version, -v${RESET}             Show version number\n"
-  printf "    ${CYAN}--help, -h${RESET}                Show this help\n\n"
-
-  printf "  ${BWHITE}EXAMPLES${RESET}\n"
-  printf "    pristine                      Launch interactive menu\n"
-  printf "    pristine clean --dry-run      Preview what would be cleaned (safe)\n"
-  printf "    pristine analyze ~/Downloads  Drill into Downloads folder\n"
-  printf "    pristine doctor               Get a full health report\n\n"
-
-  printf "  ${BWHITE}SAFETY${RESET}\n"
-  printf "    All destructive commands ask for confirmation before running.\n"
-  printf "    Use --dry-run to preview safely. doctor is always read-only.\n\n"
+  printf "  ${BWHT}USAGE${R}\n    pristine [command] [options]\n\n"
+  printf "  ${BWHT}COMMANDS${R}\n"
+  printf "    ${CYN}pristine${R}                    Interactive menu\n"
+  printf "    ${CYN}pristine clean${R}              Scan then deep clean everything\n"
+  printf "    ${CYN}pristine optimize${R}           Flush DNS, maintenance, services\n"
+  printf "    ${CYN}pristine analyze${R} [path]     Visual disk breakdown\n"
+  printf "    ${CYN}pristine uninstall${R}          Remove apps + all hidden files\n"
+  printf "    ${CYN}pristine purge${R}              Delete build artifacts\n"
+  printf "    ${CYN}pristine status${R}             Live system dashboard\n"
+  printf "    ${CYN}pristine doctor${R}             Read-only health check\n\n"
+  printf "  ${BWHT}OPTIONS${R}\n"
+  printf "    ${CYN}--dry-run${R}                   Preview — no changes made\n"
+  printf "    ${CYN}--version,-v${R}                Show version\n"
+  printf "    ${CYN}--help,-h${R}                   This help text\n\n"
+  printf "  ${BWHT}EXAMPLES${R}\n"
+  printf "    pristine clean --dry-run    See what would be removed\n"
+  printf "    pristine analyze ~/Desktop  Drill into Desktop\n"
+  printf "    sudo pristine optimize      Full optimization with privileges\n\n"
+  printf "  ${BWHT}SAFETY${R}\n"
+  printf "    Every destructive command shows sizes first, then asks to confirm.\n"
+  printf "    Use --dry-run to safely preview any command.\n\n"
 }
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  ENTRY POINT                                                 ║
-# ╚══════════════════════════════════════════════════════════════╝
-
+# ══════════════════════════════════════════════════════════════════
+#  ENTRY POINT
+# ══════════════════════════════════════════════════════════════════
 main() {
-  require_macos
-
-  # Default to interactive menu if no args
-  local command="${1:-menu}"
+  local cmd="${1:-menu}"
   shift 2>/dev/null || true
 
-  local extra_args=()
+  local extra=()
   for arg in "$@"; do
     case "$arg" in
-      --dry-run)    DRY_RUN=true ;;
-      --debug)      DEBUG=true ;;
+      --dry-run)   DRY_RUN=true ;;
       --version|-v) printf "Pristine v%s\n" "$VERSION"; exit 0 ;;
-      --help|-h)    cmd_help; exit 0 ;;
-      *)            extra_args+=("$arg") ;;
+      --help|-h)   cmd_help; exit 0 ;;
+      *)           extra+=("$arg") ;;
     esac
   done
 
-  case "$command" in
+  case "$cmd" in
     menu|"")       cmd_menu ;;
     clean)         cmd_clean ;;
     optimize)      cmd_optimize ;;
-    analyze)       cmd_analyze "${extra_args[0]:-}" ;;
+    analyze)       cmd_analyze "${extra[0]:-}" ;;
     uninstall)     cmd_uninstall ;;
     purge)         cmd_purge ;;
     status)        cmd_status ;;
@@ -948,10 +1021,8 @@ main() {
     --help|-h)     cmd_help ;;
     --version|-v)  printf "Pristine v%s\n" "$VERSION"; exit 0 ;;
     *)
-      p_err "Unknown command: $command"
-      printf "\n"
-      cmd_help
-      exit 1
+      err "Unknown command: $cmd"
+      printf "\n"; cmd_help; exit 1
       ;;
   esac
 }
